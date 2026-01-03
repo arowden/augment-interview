@@ -1,0 +1,26 @@
+# oapi-codegen configuration file
+# See: https://github.com/oapi-codegen/oapi-codegen
+
+package: http
+output: internal/http/openapi.gen.go
+
+generate:
+  # Generate types for all schemas
+  models: true
+  # Generate Chi-compatible server interface
+  chi-server: true
+  # Generate strict server wrapper for type-safe handlers
+  strict-server: true
+  # Generate request/response types for each operation
+  embedded-spec: false
+
+output-options:
+  # Skip generating the embedded spec to reduce file size
+  skip-prune: false
+  # Include documentation comments
+  skip-fmt: false
+
+# Import aliases for generated code
+import-mapping:
+  # Map uuid format to google/uuid
+  uuid: github.com/google/uuid

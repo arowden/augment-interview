@@ -28,6 +28,10 @@ type Fund struct {
 // Returns ErrInvalidFund if:
 //   - name is empty/whitespace or exceeds MaxNameLength
 //   - totalUnits is not positive or exceeds MaxTotalUnits
+//
+// Note: CreatedAt is set to time.Now() at call time. For tests requiring
+// deterministic timestamps or ordering by CreatedAt, callers should introduce
+// delays between calls or use a clock abstraction for time-sensitive testing.
 func NewFund(name string, totalUnits int) (*Fund, error) {
 	trimmedName := strings.TrimSpace(name)
 	if trimmedName == "" || utf8.RuneCountInString(trimmedName) > MaxNameLength {

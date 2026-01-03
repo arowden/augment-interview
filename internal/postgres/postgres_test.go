@@ -199,7 +199,7 @@ func TestMigrations(t *testing.T) {
 		version, dirty, err := postgres.MigrateVersion(pool)
 		require.NoError(t, err)
 		assert.False(t, dirty)
-		assert.EqualValues(t, 5, version)
+		assert.EqualValues(t, 6, version)
 	})
 
 	t.Run("funds table exists", func(t *testing.T) {

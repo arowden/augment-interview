@@ -1,8 +1,8 @@
--- 004_add_indexes.sql
+-- 004_add_indexes.up.sql
 -- Creates indexes for query performance
 
 -- Cap table indexes
-CREATE INDEX idx_cap_table_fund ON cap_table_entries(fund_id);
+-- Note: idx_cap_table_fund_owner covers fund_id lookups via leftmost prefix
 CREATE INDEX idx_cap_table_fund_owner ON cap_table_entries(fund_id, owner_name);
 CREATE INDEX idx_cap_table_active ON cap_table_entries(fund_id) WHERE deleted_at IS NULL;
 

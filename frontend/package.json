@@ -1,0 +1,14 @@
+{
+  "name": "augment-fund-frontend",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Frontend for Augment Fund Cap Table System",
+  "scripts": {
+    "generate-api": "npx openapi-typescript-codegen --input ../api/openapi.yaml --output src/api/generated --client fetch --useUnionTypes",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "openapi-typescript-codegen": "^0.29.0",
+    "typescript": "^5.7.0"
+  }
+}

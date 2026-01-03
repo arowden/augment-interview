@@ -40,7 +40,14 @@ func TestPostgresRepository(t *testing.T) {
 		assert.Equal(t, fund.TotalUnits, found.TotalUnits)
 	})
 
-	t.Run("Create rejects duplicate fund names", func(t *testing.T) {
+	t.Run("Create returns ErrNilFund for nil fund", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		err := repo.Create(ctx, nil)
+		assert.ErrorIs(t, err, ErrNilFund)
+	})
+
+	t.Run("Create returns ErrDuplicateFundName for duplicate names", func(t *testing.T) {
 		tc.Reset(ctx)
 		fund1, err := NewFund("Unique Fund", 1000)
 		require.NoError(t, err)
@@ -49,7 +56,7 @@ func TestPostgresRepository(t *testing.T) {
 		fund2, err := NewFund("Unique Fund", 2000)
 		require.NoError(t, err)
 		err = repo.Create(ctx, fund2)
-		assert.Error(t, err) // Should fail due to unique constraint
+		assert.ErrorIs(t, err, ErrDuplicateFundName)
 	})
 
 	t.Run("CreateTx uses provided transaction", func(t *testing.T) {
@@ -115,15 +122,17 @@ func TestPostgresRepository(t *testing.T) {
 	t.Run("List returns all funds with correct total", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create funds with delays to ensure distinct timestamps
+		// Create funds with delays to ensure distinct timestamps.
+		// NewFund sets CreatedAt to time.Now(), so we must sleep before each call.
 		fund1, _ := NewFund("First Fund", 100)
-		fund2, _ := NewFund("Second Fund", 200)
-		fund3, _ := NewFund("Third Fund", 300)
-
 		require.NoError(t, repo.Create(ctx, fund1))
-		time.Sleep(10 * time.Millisecond)
+
+		time.Sleep(50 * time.Millisecond)
+		fund2, _ := NewFund("Second Fund", 200)
 		require.NoError(t, repo.Create(ctx, fund2))
-		time.Sleep(10 * time.Millisecond)
+
+		time.Sleep(50 * time.Millisecond)
+		fund3, _ := NewFund("Third Fund", 300)
 		require.NoError(t, repo.Create(ctx, fund3))
 
 		result, err := repo.List(ctx, ListParams{Limit: 10})
@@ -149,11 +158,11 @@ func TestPostgresRepository(t *testing.T) {
 	t.Run("List respects limit parameter", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create 5 funds
+		// Create 5 funds with distinct timestamps.
 		for i := 1; i <= 5; i++ {
 			fund, _ := NewFund("Fund "+string(rune('A'+i-1)), i*100)
 			require.NoError(t, repo.Create(ctx, fund))
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		}
 
 		result, err := repo.List(ctx, ListParams{Limit: 2})
@@ -166,23 +175,23 @@ func TestPostgresRepository(t *testing.T) {
 	t.Run("List respects offset parameter", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create 5 funds with distinct timestamps
+		// Create 5 funds with distinct timestamps.
 		funds := make([]*Fund, 5)
 		for i := 0; i < 5; i++ {
 			fund, _ := NewFund("Fund "+string(rune('A'+i)), (i+1)*100)
 			funds[i] = fund
 			require.NoError(t, repo.Create(ctx, fund))
-			time.Sleep(5 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		}
 
-		// Skip first 2 (newest), get next 2
+		// Skip first 2 (newest), get next 2.
 		result, err := repo.List(ctx, ListParams{Limit: 2, Offset: 2})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
 		assert.Equal(t, 5, result.Total)
 		assert.Equal(t, 2, result.Offset)
 
-		// Should get funds[2] and funds[1] (3rd and 2nd newest)
+		// Should get funds[2] and funds[1] (3rd and 2nd newest).
 		assert.Equal(t, funds[2].ID, result.Items[0].ID)
 		assert.Equal(t, funds[1].ID, result.Items[1].ID)
 	})

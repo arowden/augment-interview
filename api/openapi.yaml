@@ -1,0 +1,688 @@
+openapi: 3.0.3
+info:
+  title: Augment Fund Cap Table API
+  description: |
+    API for managing investment fund cap tables, tracking unit ownership and transfers between parties.
+
+    ## Domain Model
+    - **Fund**: An investment vehicle with a fixed number of ownership units
+    - **Cap Table**: The authoritative record of who owns what percentage of a fund
+    - **Transfer**: Movement of units from one owner to another
+
+    ## Key Invariants
+    - Total units across all cap table entries must equal fund's total units
+    - Transfers must not result in negative ownership
+    - Owner cannot transfer to themselves
+    - Transfer units must be positive
+
+    ## Validation Contract
+    This OpenAPI specification is the **single source of truth** for all validation.
+    All field constraints (minLength, maxLength, minimum, maximum, pattern, format)
+    are authoritative. Generated code and implementations MUST derive validation from this spec.
+  version: 1.0.0
+  x-invariants:
+    - id: units-balance
+      description: Sum of all cap table entry units equals fund.totalUnits
+      scope: fund
+    - id: no-self-transfer
+      description: Transfer.fromOwner != Transfer.toOwner
+      scope: transfer
+    - id: sufficient-units
+      description: Transfer.units <= fromOwner's current holdings
+      scope: transfer
+    - id: percentage-sum
+      description: All cap table percentages sum to 100.0 (within floating point tolerance)
+      scope: cap-table
+  contact:
+    name: Augment Fund Team
+
+servers:
+  - url: /api
+    description: API base path
+
+tags:
+  - name: Funds
+    description: Fund management operations
+  - name: CapTable
+    description: Cap table queries
+  - name: Transfers
+    description: Unit transfer operations
+
+paths:
+  /funds:
+    get:
+      operationId: listFunds
+      summary: List all funds
+      description: Returns a list of all funds in the system.
+      tags:
+        - Funds
+      responses:
+        '200':
+          description: A list of funds
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Fund'
+              example:
+                - id: "550e8400-e29b-41d4-a716-446655440000"
+                  name: "Growth Fund I"
+                  totalUnits: 1000000
+                  createdAt: "2024-01-15T10:30:00Z"
+                - id: "6ba7b810-9dad-11d1-80b4-00c04fd430c8"
+                  name: "Venture Fund II"
+                  totalUnits: 500000
+                  createdAt: "2024-02-20T14:45:00Z"
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      operationId: createFund
+      summary: Create a new fund
+      description: |
+        Creates a new fund with the specified name, total units, and initial owner.
+        The initial owner receives all units in the cap table.
+      tags:
+        - Funds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFundRequest'
+            example:
+              name: "Growth Fund I"
+              totalUnits: 1000000
+              initialOwner: "Founder LLC"
+      responses:
+        '201':
+          description: Fund created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fund'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Growth Fund I"
+                totalUnits: 1000000
+                createdAt: "2024-01-15T10:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /funds/{fundId}:
+    get:
+      operationId: getFund
+      summary: Get a fund by ID
+      description: Returns the fund with the specified ID.
+      tags:
+        - Funds
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+      responses:
+        '200':
+          description: The requested fund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Fund'
+              example:
+                id: "550e8400-e29b-41d4-a716-446655440000"
+                name: "Growth Fund I"
+                totalUnits: 1000000
+                createdAt: "2024-01-15T10:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/FundNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /funds/{fundId}/cap-table:
+    get:
+      operationId: getCapTable
+      summary: Get cap table for a fund
+      description: |
+        Returns the cap table entries for the specified fund with pagination support.
+        Each entry shows the owner, units held, percentage ownership, and acquisition date.
+      tags:
+        - CapTable
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: The cap table for the fund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapTable'
+              example:
+                fundId: "550e8400-e29b-41d4-a716-446655440000"
+                entries:
+                  - ownerName: "Founder LLC"
+                    units: 600000
+                    percentage: 60.0
+                    acquiredAt: "2024-01-15T10:30:00Z"
+                  - ownerName: "Investor A"
+                    units: 250000
+                    percentage: 25.0
+                    acquiredAt: "2024-03-01T09:00:00Z"
+                  - ownerName: "Investor B"
+                    units: 150000
+                    percentage: 15.0
+                    acquiredAt: "2024-03-15T11:30:00Z"
+                total: 3
+                limit: 100
+                offset: 0
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/FundNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /funds/{fundId}/transfers:
+    get:
+      operationId: listTransfers
+      summary: List transfers for a fund
+      description: Returns all transfers for the specified fund, ordered by transfer date descending.
+      tags:
+        - Transfers
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+      responses:
+        '200':
+          description: A list of transfers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transfer'
+              example:
+                - id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                  fundId: "550e8400-e29b-41d4-a716-446655440000"
+                  fromOwner: "Founder LLC"
+                  toOwner: "Investor A"
+                  units: 250000
+                  transferredAt: "2024-03-01T09:00:00Z"
+                - id: "8d0e6680-8526-51ef-a55c-f18fd2g01bf8"
+                  fundId: "550e8400-e29b-41d4-a716-446655440000"
+                  fromOwner: "Founder LLC"
+                  toOwner: "Investor B"
+                  units: 150000
+                  transferredAt: "2024-03-15T11:30:00Z"
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/FundNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      operationId: createTransfer
+      summary: Create a transfer
+      description: |
+        Creates a new transfer of units between owners within a fund.
+
+        ## Idempotency
+        Use the optional `idempotencyKey` field to safely retry transfer requests.
+        - First request with a key: Creates the transfer and returns 201
+        - Subsequent requests with the same key and data: Returns the original transfer with 200
+        - Subsequent requests with the same key but different data: Returns 409 Conflict
+
+        ## Validation
+        - `fromOwner` must exist in the cap table with sufficient units
+        - `toOwner` must be different from `fromOwner`
+        - `units` must be positive and not exceed the sender's holdings
+      tags:
+        - Transfers
+      parameters:
+        - $ref: '#/components/parameters/FundId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTransferRequest'
+            example:
+              idempotencyKey: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+              fromOwner: "Founder LLC"
+              toOwner: "Investor A"
+              units: 250000
+      responses:
+        '201':
+          description: Transfer created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+              example:
+                id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                fundId: "550e8400-e29b-41d4-a716-446655440000"
+                fromOwner: "Founder LLC"
+                toOwner: "Investor A"
+                units: 250000
+                transferredAt: "2024-03-01T09:00:00Z"
+        '200':
+          description: Idempotent request - returning existing transfer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transfer'
+              example:
+                id: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+                fundId: "550e8400-e29b-41d4-a716-446655440000"
+                fromOwner: "Founder LLC"
+                toOwner: "Investor A"
+                units: 250000
+                transferredAt: "2024-03-01T09:00:00Z"
+        '400':
+          $ref: '#/components/responses/TransferBadRequest'
+        '404':
+          $ref: '#/components/responses/TransferNotFound'
+        '409':
+          $ref: '#/components/responses/DuplicateTransfer'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    FundId:
+      name: fundId
+      in: path
+      required: true
+      description: The unique identifier of the fund
+      schema:
+        type: string
+        format: uuid
+      example: "550e8400-e29b-41d4-a716-446655440000"
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of entries to return
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 1000
+        default: 100
+      example: 100
+
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Number of entries to skip
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
+      example: 0
+
+  schemas:
+    Fund:
+      type: object
+      description: An investment fund with ownership units
+      required:
+        - id
+        - name
+        - totalUnits
+        - createdAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the fund
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the fund (no leading/trailing whitespace)
+          example: "Growth Fund I"
+        totalUnits:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Total number of ownership units in the fund
+          example: 1000000
+        createdAt:
+          type: string
+          format: date-time
+          description: Timestamp when the fund was created
+          example: "2024-01-15T10:30:00Z"
+
+    CreateFundRequest:
+      type: object
+      description: Request body for creating a new fund
+      required:
+        - name
+        - totalUnits
+        - initialOwner
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the fund (no leading/trailing whitespace)
+          example: "Growth Fund I"
+        totalUnits:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Total number of ownership units in the fund
+          example: 1000000
+        initialOwner:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the initial owner who receives all units (no leading/trailing whitespace)
+          example: "Founder LLC"
+
+    CapTable:
+      type: object
+      description: Paginated cap table for a fund
+      required:
+        - fundId
+        - entries
+        - total
+        - limit
+        - offset
+      properties:
+        fundId:
+          type: string
+          format: uuid
+          description: The fund this cap table belongs to
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        entries:
+          type: array
+          description: Cap table entries for the current page
+          items:
+            $ref: '#/components/schemas/CapTableEntry'
+        total:
+          type: integer
+          minimum: 0
+          description: Total number of entries in the cap table
+          example: 3
+        limit:
+          type: integer
+          minimum: 1
+          description: Maximum entries per page
+          example: 100
+        offset:
+          type: integer
+          minimum: 0
+          description: Number of entries skipped
+          example: 0
+
+    CapTableEntry:
+      type: object
+      description: A single entry in the cap table representing an owner's stake
+      required:
+        - ownerName
+        - units
+        - percentage
+        - acquiredAt
+      properties:
+        ownerName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the unit holder (no leading/trailing whitespace)
+          example: "Founder LLC"
+        units:
+          type: integer
+          minimum: 0
+          maximum: 2147483647
+          description: Number of units owned
+          example: 600000
+        percentage:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 100
+          description: Percentage of total fund units owned
+          example: 60.0
+        acquiredAt:
+          type: string
+          format: date-time
+          description: Timestamp when the ownership was first acquired
+          example: "2024-01-15T10:30:00Z"
+
+    Transfer:
+      type: object
+      description: A record of units transferred between owners
+      required:
+        - id
+        - fundId
+        - fromOwner
+        - toOwner
+        - units
+        - transferredAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier for the transfer
+          example: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+        fundId:
+          type: string
+          format: uuid
+          description: The fund the transfer belongs to
+          example: "550e8400-e29b-41d4-a716-446655440000"
+        fromOwner:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the sender (no leading/trailing whitespace)
+          example: "Founder LLC"
+        toOwner:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the recipient (no leading/trailing whitespace)
+          example: "Investor A"
+        units:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Number of units transferred
+          example: 250000
+        transferredAt:
+          type: string
+          format: date-time
+          description: Timestamp when the transfer was executed
+          example: "2024-03-01T09:00:00Z"
+
+    CreateTransferRequest:
+      type: object
+      description: Request body for creating a new transfer
+      required:
+        - fromOwner
+        - toOwner
+        - units
+      properties:
+        idempotencyKey:
+          type: string
+          format: uuid
+          description: Client-generated key for deduplication. If provided, subsequent requests with the same key will return the original transfer.
+          example: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+        fromOwner:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the sender (must exist in cap table, no leading/trailing whitespace)
+          example: "Founder LLC"
+        toOwner:
+          type: string
+          minLength: 1
+          maxLength: 255
+          pattern: '^\S(.*\S)?$'
+          description: Name of the recipient (no leading/trailing whitespace)
+          example: "Investor A"
+        units:
+          type: integer
+          minimum: 1
+          maximum: 2147483647
+          description: Number of units to transfer (must not exceed sender's holdings)
+          example: 250000
+
+    Error:
+      type: object
+      description: Structured error response
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          enum:
+            - INVALID_REQUEST
+            - INVALID_FUND
+            - FUND_NOT_FOUND
+            - OWNER_NOT_FOUND
+            - INSUFFICIENT_UNITS
+            - SELF_TRANSFER
+            - DUPLICATE_TRANSFER
+            - INTERNAL_ERROR
+          description: Machine-readable error code
+          example: "FUND_NOT_FOUND"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Fund with ID 550e8400-e29b-41d4-a716-446655440000 not found"
+        details:
+          type: object
+          additionalProperties: true
+          description: Additional context about the error
+          example:
+            fundId: "550e8400-e29b-41d4-a716-446655440000"
+
+  responses:
+    BadRequest:
+      description: Invalid request parameters
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidRequest:
+              summary: Invalid request format
+              value:
+                code: "INVALID_REQUEST"
+                message: "Request body is malformed"
+                details:
+                  field: "body"
+            invalidFund:
+              summary: Invalid fund data
+              value:
+                code: "INVALID_FUND"
+                message: "Fund validation failed: name must be non-empty (max 255 chars) and totalUnits must be positive (max 2147483647)"
+                details:
+                  name: "too long"
+                  totalUnits: "must be positive"
+
+    TransferBadRequest:
+      description: Invalid transfer request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            invalidRequest:
+              summary: Invalid request format
+              value:
+                code: "INVALID_REQUEST"
+                message: "Request body is malformed"
+                details:
+                  field: "units"
+                  error: "must be a positive integer"
+            insufficientUnits:
+              summary: Sender has insufficient units
+              value:
+                code: "INSUFFICIENT_UNITS"
+                message: "Founder LLC has only 100000 units but attempted to transfer 250000"
+                details:
+                  ownerName: "Founder LLC"
+                  availableUnits: 100000
+                  requestedUnits: 250000
+            selfTransfer:
+              summary: Cannot transfer to self
+              value:
+                code: "SELF_TRANSFER"
+                message: "Cannot transfer units to yourself"
+                details:
+                  ownerName: "Founder LLC"
+
+    FundNotFound:
+      description: Fund not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "FUND_NOT_FOUND"
+            message: "Fund with ID 550e8400-e29b-41d4-a716-446655440000 not found"
+            details:
+              fundId: "550e8400-e29b-41d4-a716-446655440000"
+
+    TransferNotFound:
+      description: Owner not found in cap table
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          examples:
+            fundNotFound:
+              summary: Fund not found
+              value:
+                code: "FUND_NOT_FOUND"
+                message: "Fund with ID 550e8400-e29b-41d4-a716-446655440000 not found"
+                details:
+                  fundId: "550e8400-e29b-41d4-a716-446655440000"
+            ownerNotFound:
+              summary: Owner not found
+              value:
+                code: "OWNER_NOT_FOUND"
+                message: "Owner 'Unknown Investor' not found in cap table"
+                details:
+                  ownerName: "Unknown Investor"
+                  fundId: "550e8400-e29b-41d4-a716-446655440000"
+
+    DuplicateTransfer:
+      description: Idempotency key already used with different data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "DUPLICATE_TRANSFER"
+            message: "Idempotency key already used with different transfer data"
+            details:
+              idempotencyKey: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"
+              existingTransferId: "7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "INTERNAL_ERROR"
+            message: "An unexpected error occurred"
+            details:
+              requestId: "req-123456"

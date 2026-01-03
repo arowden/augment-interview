@@ -31,13 +31,6 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	log.Info("configuration loaded",
-		slog.String("db_host", cfg.Database.Host),
-		slog.String("db_name", cfg.Database.DBName),
-		slog.String("server_host", cfg.Server.Host),
-		slog.Int("server_port", cfg.Server.Port),
-	)
-
 	pool, err := postgres.New(ctx, cfg.Database, log)
 	if err != nil {
 		return err
@@ -53,7 +46,7 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	log.Info("server starting",
+	log.Info("server initialized, waiting for shutdown signal",
 		slog.String("host", cfg.Server.Host),
 		slog.Int("port", cfg.Server.Port),
 	)

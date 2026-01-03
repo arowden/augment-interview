@@ -21,6 +21,8 @@ type ListParams struct {
 }
 
 // Normalize applies defaults and constraints to ListParams.
+// Returns a new ListParams with normalized values; the original is unchanged.
+// Use: params = params.Normalize()
 func (p ListParams) Normalize() ListParams {
 	if p.Limit <= 0 {
 		p.Limit = DefaultListLimit
