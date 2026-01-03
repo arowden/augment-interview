@@ -199,7 +199,7 @@ func TestMigrations(t *testing.T) {
 		version, dirty, err := postgres.MigrateVersion(pool)
 		require.NoError(t, err)
 		assert.False(t, dirty)
-		assert.EqualValues(t, 6, version)
+		assert.EqualValues(t, 7, version)
 	})
 
 	t.Run("funds table exists", func(t *testing.T) {
@@ -234,7 +234,7 @@ func TestMigrations(t *testing.T) {
 			AND indexname LIKE 'idx_%'
 		`).Scan(&count)
 		require.NoError(t, err)
-		assert.GreaterOrEqual(t, count, 7, "expected at least 7 custom indexes")
+		assert.GreaterOrEqual(t, count, 8, "expected at least 8 custom indexes")
 	})
 }
 
