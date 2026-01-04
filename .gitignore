@@ -26,6 +26,13 @@ vendor/
 .DS_Store
 Thumbs.db
 
+# Environment files (may contain secrets)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
