@@ -1,4 +1,4 @@
-package ownership
+package ownership_test
 
 import (
 	"context"
@@ -8,13 +8,15 @@ import (
 	"time"
 
 	"github.com/arowden/augment-fund/internal/fund"
+	"github.com/arowden/augment-fund/internal/ownership"
 	"github.com/arowden/augment-fund/internal/postgres"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPostgresRepository(t *testing.T) {
+func TestStore(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -24,14 +26,14 @@ func TestPostgresRepository(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Cleanup(ctx) })
 
-	repo := NewPostgresRepository(tc.Pool())
-	fundRepo := fund.NewPostgresRepository(tc.Pool())
+	store := ownership.NewStore(tc.Pool())
+	fundStore := fund.NewStore(tc.Pool())
 
 	// Helper to create a fund for testing.
 	createTestFund := func(t *testing.T, name string, units int) *fund.Fund {
 		f, err := fund.NewFund(name, units)
 		require.NoError(t, err)
-		require.NoError(t, fundRepo.Create(ctx, f))
+		require.NoError(t, fundStore.Create(ctx, f))
 		return f
 	}
 
@@ -39,14 +41,14 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, err := NewCapTableEntry(testFund.ID, "John Doe", 500)
+		entry, err := ownership.NewCapTableEntry(testFund.ID, "John Doe", 500)
 		require.NoError(t, err)
 
-		err = repo.Create(ctx, entry)
+		err = store.Create(ctx, entry)
 		require.NoError(t, err)
 
 		// Verify it was persisted.
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "John Doe")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "John Doe")
 		require.NoError(t, err)
 		assert.Equal(t, entry.ID, found.ID)
 		assert.Equal(t, entry.OwnerName, found.OwnerName)
@@ -56,21 +58,21 @@ func TestPostgresRepository(t *testing.T) {
 	t.Run("Create returns ErrNilEntry for nil entry", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		err := repo.Create(ctx, nil)
-		assert.ErrorIs(t, err, ErrNilEntry)
+		err := store.Create(ctx, nil)
+		assert.ErrorIs(t, err, ownership.ErrNilEntry)
 	})
 
 	t.Run("Create returns error for duplicate owner in same fund", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry1, err := NewCapTableEntry(testFund.ID, "John Doe", 500)
+		entry1, err := ownership.NewCapTableEntry(testFund.ID, "John Doe", 500)
 		require.NoError(t, err)
-		require.NoError(t, repo.Create(ctx, entry1))
+		require.NoError(t, store.Create(ctx, entry1))
 
-		entry2, err := NewCapTableEntry(testFund.ID, "John Doe", 300)
+		entry2, err := ownership.NewCapTableEntry(testFund.ID, "John Doe", 300)
 		require.NoError(t, err)
-		err = repo.Create(ctx, entry2)
+		err = store.Create(ctx, entry2)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "John Doe")
 	})
@@ -79,13 +81,13 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, err := NewCapTableEntry(testFund.ID, "Tx Owner", 250)
+		entry, err := ownership.NewCapTableEntry(testFund.ID, "Tx Owner", 250)
 		require.NoError(t, err)
 
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
 
-		err = repo.CreateTx(ctx, tx, entry)
+		err = store.CreateTx(ctx, tx, entry)
 		require.NoError(t, err)
 
 		// Rollback - entry should not be persisted.
@@ -93,28 +95,28 @@ func TestPostgresRepository(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify not found.
-		_, err = repo.FindByFundAndOwner(ctx, testFund.ID, "Tx Owner")
-		assert.True(t, errors.Is(err, ErrOwnerNotFound))
+		_, err = store.FindByFundAndOwner(ctx, testFund.ID, "Tx Owner")
+		assert.True(t, errors.Is(err, ownership.ErrOwnerNotFound))
 	})
 
 	t.Run("CreateTx commits successfully", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, err := NewCapTableEntry(testFund.ID, "Committed Owner", 750)
+		entry, err := ownership.NewCapTableEntry(testFund.ID, "Committed Owner", 750)
 		require.NoError(t, err)
 
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
 
-		err = repo.CreateTx(ctx, tx, entry)
+		err = store.CreateTx(ctx, tx, entry)
 		require.NoError(t, err)
 
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
 		// Verify found.
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Committed Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Committed Owner")
 		require.NoError(t, err)
 		assert.Equal(t, entry.ID, found.ID)
 	})
@@ -123,7 +125,7 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		nonExistentFundID := uuid.New()
 
-		view, err := repo.FindByFundID(ctx, nonExistentFundID, ListParams{})
+		view, err := store.FindByFundID(ctx, nonExistentFundID, ownership.ListParams{})
 		require.NoError(t, err)
 		assert.NotNil(t, view.Entries)
 		assert.Empty(t, view.Entries)
@@ -135,16 +137,16 @@ func TestPostgresRepository(t *testing.T) {
 		testFund := createTestFund(t, "Test Fund", 1000)
 
 		// Create entries with different unit amounts.
-		entry1, _ := NewCapTableEntry(testFund.ID, "Small Owner", 100)
-		require.NoError(t, repo.Create(ctx, entry1))
+		entry1, _ := ownership.NewCapTableEntry(testFund.ID, "Small Owner", 100)
+		require.NoError(t, store.Create(ctx, entry1))
 
-		entry2, _ := NewCapTableEntry(testFund.ID, "Large Owner", 500)
-		require.NoError(t, repo.Create(ctx, entry2))
+		entry2, _ := ownership.NewCapTableEntry(testFund.ID, "Large Owner", 500)
+		require.NoError(t, store.Create(ctx, entry2))
 
-		entry3, _ := NewCapTableEntry(testFund.ID, "Medium Owner", 300)
-		require.NoError(t, repo.Create(ctx, entry3))
+		entry3, _ := ownership.NewCapTableEntry(testFund.ID, "Medium Owner", 300)
+		require.NoError(t, store.Create(ctx, entry3))
 
-		view, err := repo.FindByFundID(ctx, testFund.ID, ListParams{Limit: 10})
+		view, err := store.FindByFundID(ctx, testFund.ID, ownership.ListParams{Limit: 10})
 		require.NoError(t, err)
 		require.Len(t, view.Entries, 3)
 		assert.Equal(t, 3, view.TotalCount)
@@ -164,11 +166,11 @@ func TestPostgresRepository(t *testing.T) {
 
 		// Create 5 entries.
 		for i := 1; i <= 5; i++ {
-			entry, _ := NewCapTableEntry(testFund.ID, "Owner "+string(rune('A'+i-1)), i*100)
-			require.NoError(t, repo.Create(ctx, entry))
+			entry, _ := ownership.NewCapTableEntry(testFund.ID, "Owner "+string(rune('A'+i-1)), i*100)
+			require.NoError(t, store.Create(ctx, entry))
 		}
 
-		view, err := repo.FindByFundID(ctx, testFund.ID, ListParams{Limit: 2})
+		view, err := store.FindByFundID(ctx, testFund.ID, ownership.ListParams{Limit: 2})
 		require.NoError(t, err)
 		assert.Len(t, view.Entries, 2)
 		assert.Equal(t, 5, view.TotalCount)
@@ -191,12 +193,12 @@ func TestPostgresRepository(t *testing.T) {
 			{"Owner E", 500},
 		}
 		for _, e := range entries {
-			entry, _ := NewCapTableEntry(testFund.ID, e.name, e.units)
-			require.NoError(t, repo.Create(ctx, entry))
+			entry, _ := ownership.NewCapTableEntry(testFund.ID, e.name, e.units)
+			require.NoError(t, store.Create(ctx, entry))
 		}
 
 		// Skip first 2 (largest), get next 2.
-		view, err := repo.FindByFundID(ctx, testFund.ID, ListParams{Limit: 2, Offset: 2})
+		view, err := store.FindByFundID(ctx, testFund.ID, ownership.ListParams{Limit: 2, Offset: 2})
 		require.NoError(t, err)
 		assert.Len(t, view.Entries, 2)
 		assert.Equal(t, 5, view.TotalCount)
@@ -211,10 +213,10 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 100)
 
-		entry, _ := NewCapTableEntry(testFund.ID, "Only Owner", 100)
-		require.NoError(t, repo.Create(ctx, entry))
+		entry, _ := ownership.NewCapTableEntry(testFund.ID, "Only Owner", 100)
+		require.NoError(t, store.Create(ctx, entry))
 
-		view, err := repo.FindByFundID(ctx, testFund.ID, ListParams{Offset: 100})
+		view, err := store.FindByFundID(ctx, testFund.ID, ownership.ListParams{Offset: 100})
 		require.NoError(t, err)
 		assert.Empty(t, view.Entries)
 		assert.Equal(t, 1, view.TotalCount)
@@ -224,18 +226,18 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		_, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Nonexistent")
-		assert.True(t, errors.Is(err, ErrOwnerNotFound))
+		_, err := store.FindByFundAndOwner(ctx, testFund.ID, "Nonexistent")
+		assert.True(t, errors.Is(err, ownership.ErrOwnerNotFound))
 	})
 
 	t.Run("FindByFundAndOwner returns correct entry", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, _ := NewCapTableEntry(testFund.ID, "Specific Owner", 333)
-		require.NoError(t, repo.Create(ctx, entry))
+		entry, _ := ownership.NewCapTableEntry(testFund.ID, "Specific Owner", 333)
+		require.NoError(t, store.Create(ctx, entry))
 
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Specific Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Specific Owner")
 		require.NoError(t, err)
 		assert.Equal(t, entry.ID, found.ID)
 		assert.Equal(t, "Specific Owner", found.OwnerName)
@@ -246,13 +248,13 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, err := NewCapTableEntry(testFund.ID, "New Owner", 400)
+		entry, err := ownership.NewCapTableEntry(testFund.ID, "New Owner", 400)
 		require.NoError(t, err)
 
-		err = repo.Upsert(ctx, entry)
+		err = store.Upsert(ctx, entry)
 		require.NoError(t, err)
 
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "New Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "New Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 400, found.Units)
 	})
@@ -262,18 +264,18 @@ func TestPostgresRepository(t *testing.T) {
 		testFund := createTestFund(t, "Test Fund", 1000)
 
 		// Create initial entry.
-		original, _ := NewCapTableEntry(testFund.ID, "Update Owner", 300)
-		require.NoError(t, repo.Create(ctx, original))
+		original, _ := ownership.NewCapTableEntry(testFund.ID, "Update Owner", 300)
+		require.NoError(t, store.Create(ctx, original))
 
 		// Wait a bit to ensure different timestamps.
 		time.Sleep(50 * time.Millisecond)
 
 		// Upsert with new units.
-		updated, _ := NewCapTableEntry(testFund.ID, "Update Owner", 500)
-		err := repo.Upsert(ctx, updated)
+		updated, _ := ownership.NewCapTableEntry(testFund.ID, "Update Owner", 500)
+		err := store.Upsert(ctx, updated)
 		require.NoError(t, err)
 
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Update Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Update Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 500, found.Units)
 		assert.Equal(t, original.ID, found.ID) // Same ID preserved.
@@ -284,11 +286,11 @@ func TestPostgresRepository(t *testing.T) {
 		testFund := createTestFund(t, "Test Fund", 1000)
 
 		// Create initial entry.
-		original, _ := NewCapTableEntry(testFund.ID, "Acquired Owner", 200)
-		require.NoError(t, repo.Create(ctx, original))
+		original, _ := ownership.NewCapTableEntry(testFund.ID, "Acquired Owner", 200)
+		require.NoError(t, store.Create(ctx, original))
 
 		// Get the original acquired_at.
-		created, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Acquired Owner")
+		created, err := store.FindByFundAndOwner(ctx, testFund.ID, "Acquired Owner")
 		require.NoError(t, err)
 		originalAcquiredAt := created.AcquiredAt
 
@@ -296,11 +298,11 @@ func TestPostgresRepository(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 
 		// Upsert with new units.
-		updated, _ := NewCapTableEntry(testFund.ID, "Acquired Owner", 400)
-		err = repo.Upsert(ctx, updated)
+		updated, _ := ownership.NewCapTableEntry(testFund.ID, "Acquired Owner", 400)
+		err = store.Upsert(ctx, updated)
 		require.NoError(t, err)
 
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Acquired Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Acquired Owner")
 		require.NoError(t, err)
 
 		// AcquiredAt should be preserved.
@@ -312,21 +314,21 @@ func TestPostgresRepository(t *testing.T) {
 	t.Run("Upsert returns ErrNilEntry for nil entry", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		err := repo.Upsert(ctx, nil)
-		assert.ErrorIs(t, err, ErrNilEntry)
+		err := store.Upsert(ctx, nil)
+		assert.ErrorIs(t, err, ownership.ErrNilEntry)
 	})
 
 	t.Run("UpsertTx with transaction rollback", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, err := NewCapTableEntry(testFund.ID, "Rollback Owner", 600)
+		entry, err := ownership.NewCapTableEntry(testFund.ID, "Rollback Owner", 600)
 		require.NoError(t, err)
 
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
 
-		err = repo.UpsertTx(ctx, tx, entry)
+		err = store.UpsertTx(ctx, tx, entry)
 		require.NoError(t, err)
 
 		// Rollback.
@@ -334,28 +336,28 @@ func TestPostgresRepository(t *testing.T) {
 		require.NoError(t, err)
 
 		// Should not be found.
-		_, err = repo.FindByFundAndOwner(ctx, testFund.ID, "Rollback Owner")
-		assert.True(t, errors.Is(err, ErrOwnerNotFound))
+		_, err = store.FindByFundAndOwner(ctx, testFund.ID, "Rollback Owner")
+		assert.True(t, errors.Is(err, ownership.ErrOwnerNotFound))
 	})
 
 	t.Run("UpsertTx with transaction commit", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, err := NewCapTableEntry(testFund.ID, "Commit Owner", 700)
+		entry, err := ownership.NewCapTableEntry(testFund.ID, "Commit Owner", 700)
 		require.NoError(t, err)
 
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
 
-		err = repo.UpsertTx(ctx, tx, entry)
+		err = store.UpsertTx(ctx, tx, entry)
 		require.NoError(t, err)
 
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
 		// Should be found.
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Commit Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Commit Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 700, found.Units)
 	})
@@ -374,12 +376,12 @@ func TestPostgresRepository(t *testing.T) {
 			wg.Add(1)
 			go func(id int) {
 				defer wg.Done()
-				entry, err := NewCapTableEntry(testFund.ID, "Concurrent Owner", (id+1)*unitsPerGoroutine)
+				entry, err := ownership.NewCapTableEntry(testFund.ID, "Concurrent Owner", (id+1)*unitsPerGoroutine)
 				if err != nil {
 					errChan <- err
 					return
 				}
-				if err := repo.Upsert(ctx, entry); err != nil {
+				if err := store.Upsert(ctx, entry); err != nil {
 					errChan <- err
 				}
 			}(i)
@@ -394,7 +396,7 @@ func TestPostgresRepository(t *testing.T) {
 		}
 
 		// Verify the entry exists (final value is non-deterministic due to race).
-		found, err := repo.FindByFundAndOwner(ctx, testFund.ID, "Concurrent Owner")
+		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Concurrent Owner")
 		require.NoError(t, err)
 		assert.Greater(t, found.Units, 0)
 	})
@@ -403,14 +405,14 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, _ := NewCapTableEntry(testFund.ID, "Active Owner", 500)
-		require.NoError(t, repo.Create(ctx, entry))
+		entry, _ := ownership.NewCapTableEntry(testFund.ID, "Active Owner", 500)
+		require.NoError(t, store.Create(ctx, entry))
 
 		// Manually soft-delete via SQL.
 		_, err := tc.Pool().Exec(ctx, `UPDATE cap_table_entries SET deleted_at = NOW() WHERE owner_name = $1`, "Active Owner")
 		require.NoError(t, err)
 
-		view, err := repo.FindByFundID(ctx, testFund.ID, ListParams{})
+		view, err := store.FindByFundID(ctx, testFund.ID, ownership.ListParams{})
 		require.NoError(t, err)
 		assert.Empty(t, view.Entries)
 	})
@@ -419,15 +421,15 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		entry, _ := NewCapTableEntry(testFund.ID, "Deleted Owner", 500)
-		require.NoError(t, repo.Create(ctx, entry))
+		entry, _ := ownership.NewCapTableEntry(testFund.ID, "Deleted Owner", 500)
+		require.NoError(t, store.Create(ctx, entry))
 
 		// Manually soft-delete via SQL.
 		_, err := tc.Pool().Exec(ctx, `UPDATE cap_table_entries SET deleted_at = NOW() WHERE owner_name = $1`, "Deleted Owner")
 		require.NoError(t, err)
 
-		_, err = repo.FindByFundAndOwner(ctx, testFund.ID, "Deleted Owner")
-		assert.True(t, errors.Is(err, ErrOwnerNotFound))
+		_, err = store.FindByFundAndOwner(ctx, testFund.ID, "Deleted Owner")
+		assert.True(t, errors.Is(err, ownership.ErrOwnerNotFound))
 	})
 
 	t.Run("same owner name can exist in different funds", func(t *testing.T) {
@@ -435,18 +437,23 @@ func TestPostgresRepository(t *testing.T) {
 		fund1 := createTestFund(t, "Fund One", 1000)
 		fund2 := createTestFund(t, "Fund Two", 2000)
 
-		entry1, _ := NewCapTableEntry(fund1.ID, "Shared Owner", 100)
-		require.NoError(t, repo.Create(ctx, entry1))
+		entry1, _ := ownership.NewCapTableEntry(fund1.ID, "Shared Owner", 100)
+		require.NoError(t, store.Create(ctx, entry1))
 
-		entry2, _ := NewCapTableEntry(fund2.ID, "Shared Owner", 200)
-		require.NoError(t, repo.Create(ctx, entry2))
+		entry2, _ := ownership.NewCapTableEntry(fund2.ID, "Shared Owner", 200)
+		require.NoError(t, store.Create(ctx, entry2))
 
-		found1, err := repo.FindByFundAndOwner(ctx, fund1.ID, "Shared Owner")
+		found1, err := store.FindByFundAndOwner(ctx, fund1.ID, "Shared Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 100, found1.Units)
 
-		found2, err := repo.FindByFundAndOwner(ctx, fund2.ID, "Shared Owner")
+		found2, err := store.FindByFundAndOwner(ctx, fund2.ID, "Shared Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 200, found2.Units)
+	})
+
+	t.Run("NewStore returns nil for nil db", func(t *testing.T) {
+		store := ownership.NewStore(nil)
+		assert.Nil(t, store)
 	})
 }

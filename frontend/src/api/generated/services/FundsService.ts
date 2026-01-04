@@ -4,20 +4,30 @@
 /* eslint-disable */
 import type { CreateFundRequest } from '../models/CreateFundRequest';
 import type { Fund } from '../models/Fund';
+import type { FundList } from '../models/FundList';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class FundsService {
     /**
      * List all funds
-     * Returns a list of all funds in the system.
-     * @returns Fund A list of funds
+     * Returns a paginated list of all funds in the system.
+     * @param limit Maximum number of entries to return
+     * @param offset Number of entries to skip
+     * @returns FundList A paginated list of funds
      * @throws ApiError
      */
-    public static listFunds(): CancelablePromise<Array<Fund>> {
+    public static listFunds(
+        limit: number = 100,
+        offset?: number,
+    ): CancelablePromise<FundList> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/funds',
+            query: {
+                'limit': limit,
+                'offset': offset,
+            },
             errors: {
                 500: `Internal server error`,
             },

@@ -8,43 +8,46 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// PostgresRepository implements Repository using PostgreSQL.
-// All methods respect context cancellation and deadlines; callers should
-// set appropriate timeouts via context.WithTimeout for production use.
-type PostgresRepository struct {
-	pool *pgxpool.Pool
-}
-
-// NewPostgresRepository creates a new PostgresRepository.
-// Returns nil if pool is nil.
-func NewPostgresRepository(pool *pgxpool.Pool) *PostgresRepository {
-	if pool == nil {
-		return nil
-	}
-	return &PostgresRepository{pool: pool}
-}
-
-// Create persists a new fund to the database.
-func (r *PostgresRepository) Create(ctx context.Context, fund *Fund) error {
-	return r.create(ctx, r.pool, fund)
-}
-
-// CreateTx persists a new fund within the provided transaction.
-func (r *PostgresRepository) CreateTx(ctx context.Context, tx pgx.Tx, fund *Fund) error {
-	return r.create(ctx, tx, fund)
-}
-
-// querier abstracts pgxpool.Pool and pgx.Tx for shared query logic.
-type querier interface {
+// DB defines the database operations required by the store.
+type DB interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-func (r *PostgresRepository) create(ctx context.Context, q querier, fund *Fund) error {
+// Store implements Repository using a database.
+// All methods respect context cancellation and deadlines; callers should
+// set appropriate timeouts via context.WithTimeout for production use.
+//
+// Required indexes (see migrations/006_add_funds_indexes.up.sql):
+//   - idx_funds_created_at: (created_at DESC, id DESC) for ordered list queries
+//   - idx_funds_name: UNIQUE (name) for duplicate name prevention
+type Store struct {
+	db DB
+}
+
+// NewStore creates a new Store.
+// Returns nil if db is nil.
+func NewStore(db DB) *Store {
+	if db == nil {
+		return nil
+	}
+	return &Store{db: db}
+}
+
+// Create persists a new fund to the database.
+func (s *Store) Create(ctx context.Context, fund *Fund) error {
+	return s.create(ctx, s.db, fund)
+}
+
+// CreateTx persists a new fund within the provided transaction.
+func (s *Store) CreateTx(ctx context.Context, tx pgx.Tx, fund *Fund) error {
+	return s.create(ctx, tx, fund)
+}
+
+func (s *Store) create(ctx context.Context, db DB, fund *Fund) error {
 	if fund == nil {
 		return ErrNilFund
 	}
@@ -53,7 +56,7 @@ func (r *PostgresRepository) create(ctx context.Context, q querier, fund *Fund) 
 		INSERT INTO funds (id, name, total_units, created_at)
 		VALUES ($1, $2, $3, $4)
 	`
-	_, err := q.Exec(ctx, query, fund.ID, fund.Name, fund.TotalUnits, fund.CreatedAt)
+	_, err := db.Exec(ctx, query, fund.ID, fund.Name, fund.TotalUnits, fund.CreatedAt)
 	if err != nil {
 		// Check for unique constraint violation (PostgreSQL error code 23505)
 		var pgErr *pgconn.PgError
@@ -66,14 +69,14 @@ func (r *PostgresRepository) create(ctx context.Context, q querier, fund *Fund) 
 }
 
 // FindByID retrieves a fund by its UUID.
-func (r *PostgresRepository) FindByID(ctx context.Context, id uuid.UUID) (*Fund, error) {
+func (s *Store) FindByID(ctx context.Context, id uuid.UUID) (*Fund, error) {
 	const query = `
 		SELECT id, name, total_units, created_at
 		FROM funds
 		WHERE id = $1
 	`
 	var fund Fund
-	err := r.pool.QueryRow(ctx, query, id).Scan(
+	err := s.db.QueryRow(ctx, query, id).Scan(
 		&fund.ID,
 		&fund.Name,
 		&fund.TotalUnits,
@@ -89,7 +92,7 @@ func (r *PostgresRepository) FindByID(ctx context.Context, id uuid.UUID) (*Fund,
 }
 
 // List retrieves funds with pagination, ordered by created_at descending.
-func (r *PostgresRepository) List(ctx context.Context, params ListParams) (*ListResult, error) {
+func (s *Store) List(ctx context.Context, params ListParams) (*ListResult, error) {
 	params = params.Normalize()
 
 	// Single query with window function for count and pagination.
@@ -99,7 +102,7 @@ func (r *PostgresRepository) List(ctx context.Context, params ListParams) (*List
 		ORDER BY created_at DESC, id DESC
 		LIMIT $1 OFFSET $2
 	`
-	rows, err := r.pool.Query(ctx, query, params.Limit, params.Offset)
+	rows, err := s.db.Query(ctx, query, params.Limit, params.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("list funds: %w", err)
 	}
@@ -122,7 +125,7 @@ func (r *PostgresRepository) List(ctx context.Context, params ListParams) (*List
 	// Fall back to count query to get the actual total.
 	if len(funds) == 0 && params.Offset > 0 {
 		const countQuery = `SELECT COUNT(*) FROM funds`
-		if err := r.pool.QueryRow(ctx, countQuery).Scan(&total); err != nil {
+		if err := s.db.QueryRow(ctx, countQuery).Scan(&total); err != nil {
 			return nil, fmt.Errorf("count funds: %w", err)
 		}
 	}

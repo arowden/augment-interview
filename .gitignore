@@ -34,3 +34,4 @@ frontend/build/
 # Generated API client (regenerate with npm run generate-api)
 # Uncomment if you prefer to regenerate rather than commit generated code
 # frontend/src/api/generated/
+.playwright-mcp/

@@ -7,12 +7,14 @@ import (
 	"time"
 
 	"github.com/arowden/augment-fund/internal/postgres"
+	"github.com/arowden/augment-fund/internal/validation"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestPostgresRepository(t *testing.T) {
+func TestStore(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping integration test")
 	}
@@ -22,18 +24,18 @@ func TestPostgresRepository(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Cleanup(ctx) })
 
-	repo := NewPostgresRepository(tc.Pool())
+	store := NewStore(tc.Pool())
 
 	t.Run("Create persists fund to database", func(t *testing.T) {
 		tc.Reset(ctx)
 		fund, err := NewFund("Test Fund", 1000)
 		require.NoError(t, err)
 
-		err = repo.Create(ctx, fund)
+		err = store.Create(ctx, fund)
 		require.NoError(t, err)
 
 		// Verify it was persisted
-		found, err := repo.FindByID(ctx, fund.ID)
+		found, err := store.FindByID(ctx, fund.ID)
 		require.NoError(t, err)
 		assert.Equal(t, fund.ID, found.ID)
 		assert.Equal(t, fund.Name, found.Name)
@@ -43,7 +45,7 @@ func TestPostgresRepository(t *testing.T) {
 	t.Run("Create returns ErrNilFund for nil fund", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		err := repo.Create(ctx, nil)
+		err := store.Create(ctx, nil)
 		assert.ErrorIs(t, err, ErrNilFund)
 	})
 
@@ -51,11 +53,11 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		fund1, err := NewFund("Unique Fund", 1000)
 		require.NoError(t, err)
-		require.NoError(t, repo.Create(ctx, fund1))
+		require.NoError(t, store.Create(ctx, fund1))
 
 		fund2, err := NewFund("Unique Fund", 2000)
 		require.NoError(t, err)
-		err = repo.Create(ctx, fund2)
+		err = store.Create(ctx, fund2)
 		assert.ErrorIs(t, err, ErrDuplicateFundName)
 	})
 
@@ -67,7 +69,7 @@ func TestPostgresRepository(t *testing.T) {
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
 
-		err = repo.CreateTx(ctx, tx, fund)
+		err = store.CreateTx(ctx, tx, fund)
 		require.NoError(t, err)
 
 		// Rollback - fund should not be persisted
@@ -75,7 +77,7 @@ func TestPostgresRepository(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify not found
-		_, err = repo.FindByID(ctx, fund.ID)
+		_, err = store.FindByID(ctx, fund.ID)
 		assert.True(t, errors.Is(err, ErrNotFound))
 	})
 
@@ -87,14 +89,14 @@ func TestPostgresRepository(t *testing.T) {
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
 
-		err = repo.CreateTx(ctx, tx, fund)
+		err = store.CreateTx(ctx, tx, fund)
 		require.NoError(t, err)
 
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
 		// Verify found
-		found, err := repo.FindByID(ctx, fund.ID)
+		found, err := store.FindByID(ctx, fund.ID)
 		require.NoError(t, err)
 		assert.Equal(t, fund.ID, found.ID)
 	})
@@ -103,19 +105,19 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 		nonExistentID := uuid.New()
 
-		_, err := repo.FindByID(ctx, nonExistentID)
+		_, err := store.FindByID(ctx, nonExistentID)
 		assert.True(t, errors.Is(err, ErrNotFound))
 	})
 
 	t.Run("List returns empty result when no funds", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		result, err := repo.List(ctx, ListParams{})
+		result, err := store.List(ctx, ListParams{})
 		require.NoError(t, err)
 		assert.NotNil(t, result.Items)
 		assert.Empty(t, result.Items)
 		assert.Equal(t, 0, result.Total)
-		assert.Equal(t, DefaultListLimit, result.Limit)
+		assert.Equal(t, validation.DefaultLimit, result.Limit)
 		assert.Equal(t, 0, result.Offset)
 	})
 
@@ -125,17 +127,17 @@ func TestPostgresRepository(t *testing.T) {
 		// Create funds with delays to ensure distinct timestamps.
 		// NewFund sets CreatedAt to time.Now(), so we must sleep before each call.
 		fund1, _ := NewFund("First Fund", 100)
-		require.NoError(t, repo.Create(ctx, fund1))
+		require.NoError(t, store.Create(ctx, fund1))
 
 		time.Sleep(50 * time.Millisecond)
 		fund2, _ := NewFund("Second Fund", 200)
-		require.NoError(t, repo.Create(ctx, fund2))
+		require.NoError(t, store.Create(ctx, fund2))
 
 		time.Sleep(50 * time.Millisecond)
 		fund3, _ := NewFund("Third Fund", 300)
-		require.NoError(t, repo.Create(ctx, fund3))
+		require.NoError(t, store.Create(ctx, fund3))
 
-		result, err := repo.List(ctx, ListParams{Limit: 10})
+		result, err := store.List(ctx, ListParams{Limit: 10})
 		require.NoError(t, err)
 		require.Len(t, result.Items, 3)
 		assert.Equal(t, 3, result.Total)
@@ -161,11 +163,11 @@ func TestPostgresRepository(t *testing.T) {
 		// Create 5 funds with distinct timestamps.
 		for i := 1; i <= 5; i++ {
 			fund, _ := NewFund("Fund "+string(rune('A'+i-1)), i*100)
-			require.NoError(t, repo.Create(ctx, fund))
+			require.NoError(t, store.Create(ctx, fund))
 			time.Sleep(20 * time.Millisecond)
 		}
 
-		result, err := repo.List(ctx, ListParams{Limit: 2})
+		result, err := store.List(ctx, ListParams{Limit: 2})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
 		assert.Equal(t, 5, result.Total)
@@ -180,12 +182,12 @@ func TestPostgresRepository(t *testing.T) {
 		for i := 0; i < 5; i++ {
 			fund, _ := NewFund("Fund "+string(rune('A'+i)), (i+1)*100)
 			funds[i] = fund
-			require.NoError(t, repo.Create(ctx, fund))
+			require.NoError(t, store.Create(ctx, fund))
 			time.Sleep(20 * time.Millisecond)
 		}
 
 		// Skip first 2 (newest), get next 2.
-		result, err := repo.List(ctx, ListParams{Limit: 2, Offset: 2})
+		result, err := store.List(ctx, ListParams{Limit: 2, Offset: 2})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
 		assert.Equal(t, 5, result.Total)
@@ -200,9 +202,9 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 
 		fund, _ := NewFund("Only Fund", 100)
-		require.NoError(t, repo.Create(ctx, fund))
+		require.NoError(t, store.Create(ctx, fund))
 
-		result, err := repo.List(ctx, ListParams{Offset: 100})
+		result, err := store.List(ctx, ListParams{Offset: 100})
 		require.NoError(t, err)
 		assert.Empty(t, result.Items)
 		assert.Equal(t, 1, result.Total)
@@ -212,12 +214,12 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 
 		fund, _ := NewFund("Test Fund", 100)
-		require.NoError(t, repo.Create(ctx, fund))
+		require.NoError(t, store.Create(ctx, fund))
 
 		// Negative values should be normalized
-		result, err := repo.List(ctx, ListParams{Limit: -1, Offset: -5})
+		result, err := store.List(ctx, ListParams{Limit: -1, Offset: -5})
 		require.NoError(t, err)
-		assert.Equal(t, DefaultListLimit, result.Limit)
+		assert.Equal(t, validation.DefaultLimit, result.Limit)
 		assert.Equal(t, 0, result.Offset)
 	})
 
@@ -225,10 +227,15 @@ func TestPostgresRepository(t *testing.T) {
 		tc.Reset(ctx)
 
 		fund, _ := NewFund("Test Fund", 100)
-		require.NoError(t, repo.Create(ctx, fund))
+		require.NoError(t, store.Create(ctx, fund))
 
-		result, err := repo.List(ctx, ListParams{Limit: 9999})
+		result, err := store.List(ctx, ListParams{Limit: 9999})
 		require.NoError(t, err)
-		assert.Equal(t, MaxListLimit, result.Limit)
+		assert.Equal(t, validation.MaxLimit, result.Limit)
+	})
+
+	t.Run("NewStore returns nil for nil db", func(t *testing.T) {
+		store := NewStore(nil)
+		assert.Nil(t, store)
 	})
 }

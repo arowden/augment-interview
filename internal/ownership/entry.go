@@ -6,12 +6,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/google/uuid"
-)
-
-const (
-	// MaxOwnerNameLength is the maximum allowed length for an owner name.
-	MaxOwnerNameLength = 255
 )
 
 // Entry represents a single ownership record in the cap table.
@@ -27,17 +23,17 @@ type Entry struct {
 
 // NewCapTableEntry creates a new cap table entry with validation.
 // Returns an error if:
-//   - ownerName is empty/whitespace or exceeds MaxOwnerNameLength
-//   - units is negative (zero is valid for sold-out positions)
+//   - ownerName is empty/whitespace or exceeds validation.MaxNameLength
+//   - units is negative or exceeds validation.MaxUnits (zero is valid for sold-out positions)
 //
 // The ownerName is trimmed of leading/trailing whitespace.
 // AcquiredAt and UpdatedAt are set to time.Now() at call time.
 func NewCapTableEntry(fundID uuid.UUID, ownerName string, units int) (*Entry, error) {
 	trimmedName := strings.TrimSpace(ownerName)
-	if trimmedName == "" || utf8.RuneCountInString(trimmedName) > MaxOwnerNameLength {
+	if trimmedName == "" || utf8.RuneCountInString(trimmedName) > validation.MaxNameLength {
 		return nil, ErrInvalidOwner
 	}
-	if units < 0 {
+	if units < 0 || units > validation.MaxUnits {
 		return nil, ErrInvalidUnits
 	}
 

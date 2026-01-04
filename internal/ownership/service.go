@@ -46,3 +46,16 @@ func (s *Service) GetCapTable(ctx context.Context, fundID uuid.UUID, params List
 func (s *Service) GetOwnership(ctx context.Context, fundID uuid.UUID, ownerName string) (*Entry, error) {
 	return s.repo.FindByFundAndOwner(ctx, fundID, ownerName)
 }
+
+// CreateEntry creates a new cap table entry for a fund.
+// This is typically used when creating a fund with an initial owner.
+func (s *Service) CreateEntry(ctx context.Context, fundID uuid.UUID, ownerName string, units int) (*Entry, error) {
+	entry, err := NewCapTableEntry(fundID, ownerName, units)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.repo.Create(ctx, entry); err != nil {
+		return nil, err
+	}
+	return entry, nil
+}

@@ -15,7 +15,7 @@ export type CreateFundRequest = {
      */
     totalUnits: number;
     /**
-     * Name of the initial owner who receives all units (no leading/trailing whitespace)
+     * Name of the initial owner who will receive all units (no leading/trailing whitespace)
      */
     initialOwner: string;
 };

@@ -4,25 +4,34 @@
 /* eslint-disable */
 import type { CreateTransferRequest } from '../models/CreateTransferRequest';
 import type { Transfer } from '../models/Transfer';
+import type { TransferList } from '../models/TransferList';
 import type { CancelablePromise } from '../core/CancelablePromise';
 import { OpenAPI } from '../core/OpenAPI';
 import { request as __request } from '../core/request';
 export class TransfersService {
     /**
      * List transfers for a fund
-     * Returns all transfers for the specified fund, ordered by transfer date descending.
+     * Returns a paginated list of transfers for the specified fund, ordered by transfer date ascending.
      * @param fundId The unique identifier of the fund
-     * @returns Transfer A list of transfers
+     * @param limit Maximum number of entries to return
+     * @param offset Number of entries to skip
+     * @returns TransferList A paginated list of transfers
      * @throws ApiError
      */
     public static listTransfers(
         fundId: string,
-    ): CancelablePromise<Array<Transfer>> {
+        limit: number = 100,
+        offset?: number,
+    ): CancelablePromise<TransferList> {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/funds/{fundId}/transfers',
             path: {
                 'fundId': fundId,
+            },
+            query: {
+                'limit': limit,
+                'offset': offset,
             },
             errors: {
                 400: `Invalid request parameters`,

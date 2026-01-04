@@ -6,14 +6,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/google/uuid"
-)
-
-const (
-	// MaxNameLength is the maximum allowed length for a fund name.
-	MaxNameLength = 255
-	// MaxTotalUnits is the maximum allowed value for total units (PostgreSQL INTEGER max).
-	MaxTotalUnits = 2_147_483_647
 )
 
 // Fund represents an investment fund with ownership units.
@@ -26,18 +20,18 @@ type Fund struct {
 
 // NewFund creates a new Fund with validation.
 // Returns ErrInvalidFund if:
-//   - name is empty/whitespace or exceeds MaxNameLength
-//   - totalUnits is not positive or exceeds MaxTotalUnits
+//   - name is empty/whitespace or exceeds validation.MaxNameLength
+//   - totalUnits is not positive or exceeds validation.MaxUnits
 //
 // Note: CreatedAt is set to time.Now() at call time. For tests requiring
 // deterministic timestamps or ordering by CreatedAt, callers should introduce
 // delays between calls or use a clock abstraction for time-sensitive testing.
 func NewFund(name string, totalUnits int) (*Fund, error) {
 	trimmedName := strings.TrimSpace(name)
-	if trimmedName == "" || utf8.RuneCountInString(trimmedName) > MaxNameLength {
+	if trimmedName == "" || utf8.RuneCountInString(trimmedName) > validation.MaxNameLength {
 		return nil, ErrInvalidFund
 	}
-	if totalUnits <= 0 || totalUnits > MaxTotalUnits {
+	if totalUnits <= 0 || totalUnits > validation.MaxUnits {
 		return nil, ErrInvalidFund
 	}
 	return &Fund{

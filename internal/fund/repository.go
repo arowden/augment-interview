@@ -3,38 +3,14 @@ package fund
 import (
 	"context"
 
+	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-const (
-	// DefaultListLimit is the default number of items returned per page.
-	DefaultListLimit = 100
-	// MaxListLimit is the maximum allowed items per page.
-	MaxListLimit = 1000
-)
-
-// ListParams configures pagination for list operations.
-type ListParams struct {
-	Limit  int
-	Offset int
-}
-
-// Normalize applies defaults and constraints to ListParams.
-// Returns a new ListParams with normalized values; the original is unchanged.
-// Use: params = params.Normalize()
-func (p ListParams) Normalize() ListParams {
-	if p.Limit <= 0 {
-		p.Limit = DefaultListLimit
-	}
-	if p.Limit > MaxListLimit {
-		p.Limit = MaxListLimit
-	}
-	if p.Offset < 0 {
-		p.Offset = 0
-	}
-	return p
-}
+// ListParams is an alias for the shared pagination type.
+// Deprecated: Use validation.ListParams directly for new code.
+type ListParams = validation.ListParams
 
 // ListResult contains paginated fund results.
 type ListResult struct {

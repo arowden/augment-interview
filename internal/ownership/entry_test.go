@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -55,14 +56,14 @@ func TestNewCapTableEntry(t *testing.T) {
 	})
 
 	t.Run("owner name exceeding max length returns error", func(t *testing.T) {
-		longName := strings.Repeat("A", MaxOwnerNameLength+1)
+		longName := strings.Repeat("A", validation.MaxNameLength+1)
 		entry, err := NewCapTableEntry(fundID, longName, 1000)
 		assert.Nil(t, entry)
 		assert.ErrorIs(t, err, ErrInvalidOwner)
 	})
 
 	t.Run("owner name at max length succeeds", func(t *testing.T) {
-		maxName := strings.Repeat("A", MaxOwnerNameLength)
+		maxName := strings.Repeat("A", validation.MaxNameLength)
 		entry, err := NewCapTableEntry(fundID, maxName, 1000)
 		require.NoError(t, err)
 		assert.Equal(t, maxName, entry.OwnerName)
@@ -70,7 +71,7 @@ func TestNewCapTableEntry(t *testing.T) {
 
 	t.Run("unicode owner name counts runes not bytes", func(t *testing.T) {
 		// 255 CJK characters (each is 3 bytes in UTF-8, so 765 bytes total).
-		unicodeName := strings.Repeat("基", MaxOwnerNameLength)
+		unicodeName := strings.Repeat("基", validation.MaxNameLength)
 		entry, err := NewCapTableEntry(fundID, unicodeName, 1000)
 		require.NoError(t, err)
 		assert.Equal(t, unicodeName, entry.OwnerName)
@@ -78,7 +79,7 @@ func TestNewCapTableEntry(t *testing.T) {
 
 	t.Run("unicode owner name exceeding max runes returns error", func(t *testing.T) {
 		// 256 CJK characters should fail.
-		unicodeName := strings.Repeat("基", MaxOwnerNameLength+1)
+		unicodeName := strings.Repeat("基", validation.MaxNameLength+1)
 		entry, err := NewCapTableEntry(fundID, unicodeName, 1000)
 		assert.Nil(t, entry)
 		assert.ErrorIs(t, err, ErrInvalidOwner)

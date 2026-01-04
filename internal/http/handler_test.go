@@ -7,7 +7,9 @@ import (
 	"github.com/arowden/augment-fund/internal/fund"
 	"github.com/arowden/augment-fund/internal/ownership"
 	"github.com/arowden/augment-fund/internal/postgres"
+	"github.com/arowden/augment-fund/internal/transfer"
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -22,12 +24,18 @@ func TestAPIHandler(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { tc.Cleanup(ctx) })
 
-	fundRepo := fund.NewPostgresRepository(tc.Pool())
-	fundService, err := fund.NewService(fundRepo)
+	fundStore := fund.NewStore(tc.Pool())
+	ownershipStore := ownership.NewStore(tc.Pool())
+
+	// Fund service needs pool and ownership repo for transactional fund creation.
+	fundService, err := fund.NewService(
+		fundStore,
+		fund.WithPool(tc.Pool()),
+		fund.WithOwnershipRepository(ownershipStore),
+	)
 	require.NoError(t, err)
 
-	ownershipRepo := ownership.NewPostgresRepository(tc.Pool())
-	ownershipService, err := ownership.NewService(ownership.WithRepository(ownershipRepo))
+	ownershipService, err := ownership.NewService(ownership.WithRepository(ownershipStore))
 	require.NoError(t, err)
 
 	handler := NewAPIHandler(
@@ -41,9 +49,12 @@ func TestAPIHandler(t *testing.T) {
 		resp, err := handler.ListFunds(ctx, ListFundsRequestObject{})
 		require.NoError(t, err)
 
-		funds, ok := resp.(ListFunds200JSONResponse)
+		fundList, ok := resp.(ListFunds200JSONResponse)
 		require.True(t, ok)
-		assert.Empty(t, funds)
+		assert.Empty(t, fundList.Funds)
+		assert.Equal(t, 0, fundList.Total)
+		assert.Equal(t, 100, fundList.Limit) // Default limit
+		assert.Equal(t, 0, fundList.Offset)
 	})
 
 	t.Run("CreateFund creates and returns fund", func(t *testing.T) {
@@ -51,8 +62,9 @@ func TestAPIHandler(t *testing.T) {
 
 		resp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
-				Name:       "Test Fund",
-				TotalUnits: 1000,
+				Name:         "Test Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Founder LLC",
 			},
 		})
 		require.NoError(t, err)
@@ -69,8 +81,9 @@ func TestAPIHandler(t *testing.T) {
 
 		resp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
-				Name:       "",
-				TotalUnits: 1000,
+				Name:         "",
+				TotalUnits:   1000,
+				InitialOwner: "Founder LLC",
 			},
 		})
 		require.NoError(t, err)
@@ -110,8 +123,9 @@ func TestAPIHandler(t *testing.T) {
 		// Create fund first.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
-				Name:       "Lookup Fund",
-				TotalUnits: 500,
+				Name:         "Lookup Fund",
+				TotalUnits:   500,
+				InitialOwner: "Founder LLC",
 			},
 		})
 		require.NoError(t, err)
@@ -142,14 +156,15 @@ func TestAPIHandler(t *testing.T) {
 		assert.True(t, ok)
 	})
 
-	t.Run("GetCapTable returns empty entries for fund with no owners", func(t *testing.T) {
+	t.Run("GetCapTable returns entries for fund with initial owner", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create fund.
+		// Create fund with initial owner.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
-				Name:       "Empty Fund",
-				TotalUnits: 1000,
+				Name:         "Initial Owner Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Founder LLC",
 			},
 		})
 		require.NoError(t, err)
@@ -165,69 +180,32 @@ func TestAPIHandler(t *testing.T) {
 		capTable, ok := resp.(GetCapTable200JSONResponse)
 		require.True(t, ok)
 		assert.Equal(t, created.Id, capTable.FundId)
-		assert.Empty(t, capTable.Entries)
-		assert.Equal(t, 0, capTable.Total)
-	})
-
-	t.Run("GetCapTable returns entries with percentages", func(t *testing.T) {
-		tc.Reset(ctx)
-
-		// Create fund.
-		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
-			Body: &CreateFundJSONRequestBody{
-				Name:       "Cap Table Fund",
-				TotalUnits: 1000,
-			},
-		})
-		require.NoError(t, err)
-		created := createResp.(CreateFund201JSONResponse)
-
-		// Add ownership entries directly via repository.
-		entry1, _ := ownership.NewCapTableEntry(created.Id, "Owner A", 600)
-		require.NoError(t, ownershipRepo.Create(ctx, entry1))
-
-		entry2, _ := ownership.NewCapTableEntry(created.Id, "Owner B", 400)
-		require.NoError(t, ownershipRepo.Create(ctx, entry2))
-
-		// Get cap table.
-		resp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
-			FundId: created.Id,
-			Params: GetCapTableParams{},
-		})
-		require.NoError(t, err)
-
-		capTable, ok := resp.(GetCapTable200JSONResponse)
-		require.True(t, ok)
-		assert.Equal(t, 2, capTable.Total)
-		require.Len(t, capTable.Entries, 2)
-
-		// Entries should be ordered by units descending.
-		assert.Equal(t, "Owner A", capTable.Entries[0].OwnerName)
-		assert.Equal(t, 600, capTable.Entries[0].Units)
-		assert.InDelta(t, 60.0, capTable.Entries[0].Percentage, 0.01)
-
-		assert.Equal(t, "Owner B", capTable.Entries[1].OwnerName)
-		assert.Equal(t, 400, capTable.Entries[1].Units)
-		assert.InDelta(t, 40.0, capTable.Entries[1].Percentage, 0.01)
+		require.Len(t, capTable.Entries, 1)
+		assert.Equal(t, 1, capTable.Total)
+		assert.Equal(t, "Founder LLC", capTable.Entries[0].OwnerName)
+		assert.Equal(t, 1000, capTable.Entries[0].Units)
+		assert.InDelta(t, 100.0, capTable.Entries[0].Percentage, 0.01)
 	})
 
 	t.Run("GetCapTable respects pagination params", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create fund.
+		// Create fund with initial owner.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
-				Name:       "Paginated Fund",
-				TotalUnits: 1000,
+				Name:         "Paginated Fund",
+				TotalUnits:   1500,
+				InitialOwner: "Initial Owner",
 			},
 		})
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Add 5 ownership entries.
-		for i := 1; i <= 5; i++ {
+		// Add 4 more ownership entries (initial owner already has 1500 units).
+		// We need to update the initial owner's units and add others.
+		for i := 1; i <= 4; i++ {
 			entry, _ := ownership.NewCapTableEntry(created.Id, "Owner "+string(rune('A'+i-1)), i*100)
-			require.NoError(t, ownershipRepo.Create(ctx, entry))
+			require.NoError(t, ownershipStore.Create(ctx, entry))
 		}
 
 		// Get first page (limit 2).
@@ -247,8 +225,8 @@ func TestAPIHandler(t *testing.T) {
 		assert.Equal(t, 2, capTable.Limit)
 		assert.Equal(t, 0, capTable.Offset)
 
-		// First two should be highest unit owners (E=500, D=400).
-		assert.Equal(t, "Owner E", capTable.Entries[0].OwnerName)
+		// First two should be highest unit owners (Initial Owner=1500, D=400).
+		assert.Equal(t, "Initial Owner", capTable.Entries[0].OwnerName)
 		assert.Equal(t, "Owner D", capTable.Entries[1].OwnerName)
 
 		// Get second page.
@@ -303,5 +281,513 @@ func TestAPIHandler(t *testing.T) {
 		errResp, ok := resp.(ListFunds500JSONResponse)
 		require.True(t, ok)
 		assert.Equal(t, INTERNALERROR, errResp.Code)
+	})
+}
+
+func TestAPIHandler_Transfers(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test")
+	}
+
+	ctx := context.Background()
+	tc, err := postgres.NewTestContainer(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { tc.Cleanup(ctx) })
+
+	fundStore := fund.NewStore(tc.Pool())
+	ownershipStore := ownership.NewStore(tc.Pool())
+	transferStore := transfer.NewStore(tc.Pool())
+
+	fundService, err := fund.NewService(
+		fundStore,
+		fund.WithPool(tc.Pool()),
+		fund.WithOwnershipRepository(ownershipStore),
+	)
+	require.NoError(t, err)
+
+	ownershipService, err := ownership.NewService(ownership.WithRepository(ownershipStore))
+	require.NoError(t, err)
+
+	transferService, err := transfer.NewService(
+		transfer.WithRepository(transferStore),
+		transfer.WithOwnershipRepository(ownershipStore),
+		transfer.WithPool(tc.Pool()),
+	)
+	require.NoError(t, err)
+
+	handler := NewAPIHandler(
+		WithFundService(fundService),
+		WithOwnershipService(ownershipService),
+		WithTransferService(transferService),
+	)
+
+	t.Run("ListTransfers returns empty list for fund with no transfers", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund first.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Transfer Test Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Founder",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// List transfers - should be empty.
+		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
+			FundId: created.Id,
+			Params: ListTransfersParams{},
+		})
+		require.NoError(t, err)
+
+		transferList, ok := resp.(ListTransfers200JSONResponse)
+		require.True(t, ok)
+		assert.Empty(t, transferList.Transfers)
+		assert.Equal(t, 0, transferList.Total)
+		assert.Equal(t, created.Id, transferList.FundId)
+	})
+
+	t.Run("ListTransfers returns 404 for non-existent fund", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
+			FundId: uuid.New(),
+			Params: ListTransfersParams{},
+		})
+		require.NoError(t, err)
+
+		_, ok := resp.(ListTransfers404JSONResponse)
+		assert.True(t, ok)
+	})
+
+	t.Run("CreateTransfer successfully transfers units", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund with initial owner.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Transfer Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Transfer 200 units from Alice to Bob.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Bob",
+				Units:     200,
+			},
+		})
+		require.NoError(t, err)
+
+		transferResp, ok := resp.(CreateTransfer201JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, created.Id, transferResp.FundId)
+		assert.Equal(t, "Alice", transferResp.FromOwner)
+		assert.Equal(t, "Bob", transferResp.ToOwner)
+		assert.Equal(t, 200, transferResp.Units)
+
+		// Verify cap table updated.
+		capResp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
+			FundId: created.Id,
+			Params: GetCapTableParams{},
+		})
+		require.NoError(t, err)
+
+		capTable := capResp.(GetCapTable200JSONResponse)
+		assert.Len(t, capTable.Entries, 2)
+
+		// Find Alice and Bob.
+		var aliceUnits, bobUnits int
+		for _, e := range capTable.Entries {
+			if e.OwnerName == "Alice" {
+				aliceUnits = e.Units
+			} else if e.OwnerName == "Bob" {
+				bobUnits = e.Units
+			}
+		}
+		assert.Equal(t, 800, aliceUnits)
+		assert.Equal(t, 200, bobUnits)
+	})
+
+	t.Run("CreateTransfer returns 404 for non-existent fund", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: uuid.New(),
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Bob",
+				Units:     100,
+			},
+		})
+		require.NoError(t, err)
+
+		_, ok := resp.(CreateTransfer404JSONResponse)
+		assert.True(t, ok)
+	})
+
+	t.Run("CreateTransfer returns 404 for non-existent owner", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Owner Test Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Try to transfer from non-existent owner.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "NonExistent",
+				ToOwner:   "Bob",
+				Units:     100,
+			},
+		})
+		require.NoError(t, err)
+
+		errResp, ok := resp.(CreateTransfer404JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, OWNERNOTFOUND, errResp.Code)
+	})
+
+	t.Run("CreateTransfer returns 400 for insufficient units", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Insufficient Units Fund",
+				TotalUnits:   100,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Try to transfer more units than available.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Bob",
+				Units:     500,
+			},
+		})
+		require.NoError(t, err)
+
+		errResp, ok := resp.(CreateTransfer400JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, INSUFFICIENTUNITS, errResp.Code)
+	})
+
+	t.Run("CreateTransfer returns 400 for self transfer", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Self Transfer Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Try to transfer to self.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Alice",
+				Units:     100,
+			},
+		})
+		require.NoError(t, err)
+
+		errResp, ok := resp.(CreateTransfer400JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, INVALIDREQUEST, errResp.Code)
+	})
+
+	t.Run("CreateTransfer returns 400 for invalid units", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Invalid Units Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Try to transfer zero units.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Bob",
+				Units:     0,
+			},
+		})
+		require.NoError(t, err)
+
+		errResp, ok := resp.(CreateTransfer400JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, INVALIDREQUEST, errResp.Code)
+	})
+
+	t.Run("CreateTransfer returns 400 for invalid owner name", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Invalid Owner Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Try to transfer with empty owner.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "",
+				ToOwner:   "Bob",
+				Units:     100,
+			},
+		})
+		require.NoError(t, err)
+
+		errResp, ok := resp.(CreateTransfer400JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, INVALIDREQUEST, errResp.Code)
+	})
+
+	t.Run("CreateTransfer with idempotency key returns same transfer", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Idempotency Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		idempotencyKey := uuid.New()
+
+		// First transfer.
+		resp1, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner:      "Alice",
+				ToOwner:        "Bob",
+				Units:          100,
+				IdempotencyKey: (*openapi_types.UUID)(&idempotencyKey),
+			},
+		})
+		require.NoError(t, err)
+		transfer1 := resp1.(CreateTransfer201JSONResponse)
+
+		// Second transfer with same key - should return same transfer.
+		resp2, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner:      "Alice",
+				ToOwner:        "Bob",
+				Units:          100,
+				IdempotencyKey: (*openapi_types.UUID)(&idempotencyKey),
+			},
+		})
+		require.NoError(t, err)
+		transfer2 := resp2.(CreateTransfer201JSONResponse)
+
+		assert.Equal(t, transfer1.Id, transfer2.Id)
+
+		// Verify only 100 units were transferred total.
+		capResp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
+			FundId: created.Id,
+			Params: GetCapTableParams{},
+		})
+		require.NoError(t, err)
+
+		capTable := capResp.(GetCapTable200JSONResponse)
+		var bobUnits int
+		for _, e := range capTable.Entries {
+			if e.OwnerName == "Bob" {
+				bobUnits = e.Units
+			}
+		}
+		assert.Equal(t, 100, bobUnits)
+	})
+
+	t.Run("CreateTransfer returns 409 for duplicate idempotency key with different data", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Duplicate Key Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		idempotencyKey := uuid.New()
+
+		// First transfer.
+		_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner:      "Alice",
+				ToOwner:        "Bob",
+				Units:          100,
+				IdempotencyKey: (*openapi_types.UUID)(&idempotencyKey),
+			},
+		})
+		require.NoError(t, err)
+
+		// Second transfer with same key but different amount.
+		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner:      "Alice",
+				ToOwner:        "Bob",
+				Units:          200, // Different amount!
+				IdempotencyKey: (*openapi_types.UUID)(&idempotencyKey),
+			},
+		})
+		require.NoError(t, err)
+
+		errResp, ok := resp.(CreateTransfer409JSONResponse)
+		require.True(t, ok)
+		assert.Equal(t, DUPLICATETRANSFER, errResp.Code)
+	})
+
+	t.Run("ListTransfers returns transfers after creation", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "List Transfers Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Create some transfers.
+		_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Bob",
+				Units:     100,
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
+			FundId: created.Id,
+			Body: &CreateTransferJSONRequestBody{
+				FromOwner: "Alice",
+				ToOwner:   "Charlie",
+				Units:     200,
+			},
+		})
+		require.NoError(t, err)
+
+		// List transfers.
+		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
+			FundId: created.Id,
+			Params: ListTransfersParams{},
+		})
+		require.NoError(t, err)
+
+		transferList := resp.(ListTransfers200JSONResponse)
+		assert.Equal(t, 2, transferList.Total)
+		assert.Len(t, transferList.Transfers, 2)
+	})
+
+	t.Run("ListTransfers respects pagination", func(t *testing.T) {
+		tc.Reset(ctx)
+
+		// Create a fund.
+		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
+			Body: &CreateFundJSONRequestBody{
+				Name:         "Pagination Fund",
+				TotalUnits:   1000,
+				InitialOwner: "Alice",
+			},
+		})
+		require.NoError(t, err)
+		created := createResp.(CreateFund201JSONResponse)
+
+		// Create 3 transfers.
+		for i := 0; i < 3; i++ {
+			_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
+				FundId: created.Id,
+				Body: &CreateTransferJSONRequestBody{
+					FromOwner: "Alice",
+					ToOwner:   "Bob",
+					Units:     10,
+				},
+			})
+			require.NoError(t, err)
+		}
+
+		// Get first page.
+		limit := 2
+		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
+			FundId: created.Id,
+			Params: ListTransfersParams{Limit: &limit},
+		})
+		require.NoError(t, err)
+
+		transferList := resp.(ListTransfers200JSONResponse)
+		assert.Equal(t, 3, transferList.Total)
+		assert.Len(t, transferList.Transfers, 2)
+		assert.Equal(t, 2, transferList.Limit)
+		assert.Equal(t, 0, transferList.Offset)
+
+		// Get second page.
+		offset := 2
+		resp, err = handler.ListTransfers(ctx, ListTransfersRequestObject{
+			FundId: created.Id,
+			Params: ListTransfersParams{Limit: &limit, Offset: &offset},
+		})
+		require.NoError(t, err)
+
+		transferList = resp.(ListTransfers200JSONResponse)
+		assert.Len(t, transferList.Transfers, 1)
+		assert.Equal(t, 2, transferList.Offset)
 	})
 }

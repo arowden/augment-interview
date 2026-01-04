@@ -3,38 +3,14 @@ package ownership
 import (
 	"context"
 
+	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
 
-const (
-	// DefaultListLimit is the default number of entries returned per page.
-	DefaultListLimit = 100
-	// MaxListLimit is the maximum allowed entries per page.
-	MaxListLimit = 1000
-)
-
-// ListParams configures pagination for list operations.
-type ListParams struct {
-	Limit  int
-	Offset int
-}
-
-// Normalize applies defaults and constraints to ListParams.
-// Returns a new ListParams with normalized values; the original is unchanged.
-// Use: params = params.Normalize()
-func (p ListParams) Normalize() ListParams {
-	if p.Limit <= 0 {
-		p.Limit = DefaultListLimit
-	}
-	if p.Limit > MaxListLimit {
-		p.Limit = MaxListLimit
-	}
-	if p.Offset < 0 {
-		p.Offset = 0
-	}
-	return p
-}
+// ListParams is an alias for the shared pagination type.
+// Deprecated: Use validation.ListParams directly for new code.
+type ListParams = validation.ListParams
 
 // Repository defines the interface for cap table entry persistence operations.
 type Repository interface {
@@ -53,6 +29,19 @@ type Repository interface {
 	// FindByFundAndOwner retrieves a single cap table entry by fund and owner name.
 	// Returns ErrOwnerNotFound (wrapped) if the entry does not exist.
 	FindByFundAndOwner(ctx context.Context, fundID uuid.UUID, ownerName string) (*Entry, error)
+
+	// FindByFundAndOwnerForUpdateTx retrieves and locks a cap table entry within a transaction.
+	// Uses SELECT FOR UPDATE to prevent concurrent modifications.
+	// Returns ErrOwnerNotFound (wrapped) if the entry does not exist.
+	FindByFundAndOwnerForUpdateTx(ctx context.Context, tx pgx.Tx, fundID uuid.UUID, ownerName string) (*Entry, error)
+
+	// DecrementUnitsTx decreases an owner's units within a transaction.
+	// The caller must ensure sufficient units exist before calling.
+	DecrementUnitsTx(ctx context.Context, tx pgx.Tx, entryID uuid.UUID, units int) error
+
+	// IncrementOrCreateTx adds units to an existing owner or creates a new entry.
+	// Uses upsert to handle both cases atomically.
+	IncrementOrCreateTx(ctx context.Context, tx pgx.Tx, fundID uuid.UUID, ownerName string, units int) error
 
 	// Upsert creates or updates a cap table entry.
 	// If the entry exists (by fund_id + owner_name), updates units and updated_at.

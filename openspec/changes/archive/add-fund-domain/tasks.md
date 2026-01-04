@@ -28,15 +28,10 @@
 - [x] 4.6 Implement ListFunds
 
 ## 5. HTTP Handler Integration
-- [ ] 5.1 Add fund repository and ownership repository to HTTP handler
-- [ ] 5.2 Add pgxpool.Pool to handler for transaction management
-- [ ] 5.3 Implement CreateFund handler with cross-aggregate transaction
-- [ ] 5.4 Begin transaction, create fund, create ownership, commit
-- [ ] 5.5 Implement rollback on any failure
-- [ ] 5.6 Implement GetFund handler method
-- [ ] 5.7 Implement ListFunds handler method
-
-NOTE: Section 5 is blocked on add-ownership-domain. The CreateFund handler requires cross-aggregate transaction coordination with the ownership repository.
+- [x] 5.1 Add fund service to HTTP handler dependencies
+- [x] 5.2 Implement CreateFund handler method
+- [x] 5.3 Implement GetFund handler method
+- [x] 5.4 Implement ListFunds handler method
 
 ## 6. Testing
 - [x] 6.1 Create `internal/fund/entity_test.go` for constructor validation

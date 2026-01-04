@@ -63,7 +63,7 @@ type CapTableEntry struct {
 
 // CreateFundRequest Request body for creating a new fund
 type CreateFundRequest struct {
-	// InitialOwner Name of the initial owner who receives all units (no leading/trailing whitespace)
+	// InitialOwner Name of the initial owner who will receive all units (no leading/trailing whitespace)
 	InitialOwner string `json:"initialOwner"`
 
 	// Name Name of the fund (no leading/trailing whitespace)
@@ -118,6 +118,21 @@ type Fund struct {
 	TotalUnits int `json:"totalUnits"`
 }
 
+// FundList Paginated list of funds
+type FundList struct {
+	// Funds Funds for the current page
+	Funds []Fund `json:"funds"`
+
+	// Limit Maximum funds per page
+	Limit int `json:"limit"`
+
+	// Offset Number of funds skipped
+	Offset int `json:"offset"`
+
+	// Total Total number of funds
+	Total int `json:"total"`
+}
+
 // Transfer A record of units transferred between owners
 type Transfer struct {
 	// FromOwner Name of the sender (no leading/trailing whitespace)
@@ -137,6 +152,24 @@ type Transfer struct {
 
 	// Units Number of units transferred
 	Units int `json:"units"`
+}
+
+// TransferList Paginated list of transfers for a fund
+type TransferList struct {
+	// FundId The fund these transfers belong to
+	FundId openapi_types.UUID `json:"fundId"`
+
+	// Limit Maximum transfers per page
+	Limit int `json:"limit"`
+
+	// Offset Number of transfers skipped
+	Offset int `json:"offset"`
+
+	// Total Total number of transfers
+	Total int `json:"total"`
+
+	// Transfers Transfers for the current page
+	Transfers []Transfer `json:"transfers"`
 }
 
 // FundId defines model for FundId.
@@ -166,8 +199,26 @@ type TransferBadRequest = Error
 // TransferNotFound Structured error response
 type TransferNotFound = Error
 
+// ListFundsParams defines parameters for ListFunds.
+type ListFundsParams struct {
+	// Limit Maximum number of entries to return
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Number of entries to skip
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
 // GetCapTableParams defines parameters for GetCapTable.
 type GetCapTableParams struct {
+	// Limit Maximum number of entries to return
+	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
+
+	// Offset Number of entries to skip
+	Offset *Offset `form:"offset,omitempty" json:"offset,omitempty"`
+}
+
+// ListTransfersParams defines parameters for ListTransfers.
+type ListTransfersParams struct {
 	// Limit Maximum number of entries to return
 	Limit *Limit `form:"limit,omitempty" json:"limit,omitempty"`
 
@@ -185,7 +236,7 @@ type CreateTransferJSONRequestBody = CreateTransferRequest
 type ServerInterface interface {
 	// List all funds
 	// (GET /funds)
-	ListFunds(w http.ResponseWriter, r *http.Request)
+	ListFunds(w http.ResponseWriter, r *http.Request, params ListFundsParams)
 	// Create a new fund
 	// (POST /funds)
 	CreateFund(w http.ResponseWriter, r *http.Request)
@@ -197,7 +248,7 @@ type ServerInterface interface {
 	GetCapTable(w http.ResponseWriter, r *http.Request, fundId FundId, params GetCapTableParams)
 	// List transfers for a fund
 	// (GET /funds/{fundId}/transfers)
-	ListTransfers(w http.ResponseWriter, r *http.Request, fundId FundId)
+	ListTransfers(w http.ResponseWriter, r *http.Request, fundId FundId, params ListTransfersParams)
 	// Create a transfer
 	// (POST /funds/{fundId}/transfers)
 	CreateTransfer(w http.ResponseWriter, r *http.Request, fundId FundId)
@@ -209,7 +260,7 @@ type Unimplemented struct{}
 
 // List all funds
 // (GET /funds)
-func (_ Unimplemented) ListFunds(w http.ResponseWriter, r *http.Request) {
+func (_ Unimplemented) ListFunds(w http.ResponseWriter, r *http.Request, params ListFundsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -233,7 +284,7 @@ func (_ Unimplemented) GetCapTable(w http.ResponseWriter, r *http.Request, fundI
 
 // List transfers for a fund
 // (GET /funds/{fundId}/transfers)
-func (_ Unimplemented) ListTransfers(w http.ResponseWriter, r *http.Request, fundId FundId) {
+func (_ Unimplemented) ListTransfers(w http.ResponseWriter, r *http.Request, fundId FundId, params ListTransfersParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -255,8 +306,29 @@ type MiddlewareFunc func(http.Handler) http.Handler
 // ListFunds operation middleware
 func (siw *ServerInterfaceWrapper) ListFunds(w http.ResponseWriter, r *http.Request) {
 
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListFundsParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListFunds(w, r)
+		siw.Handler.ListFunds(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -363,8 +435,27 @@ func (siw *ServerInterfaceWrapper) ListTransfers(w http.ResponseWriter, r *http.
 		return
 	}
 
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTransfersParams
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "limit", r.URL.Query(), &params.Limit)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "offset" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "offset", r.URL.Query(), &params.Offset)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "offset", Err: err})
+		return
+	}
+
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListTransfers(w, r, fundId)
+		siw.Handler.ListTransfers(w, r, fundId, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -547,13 +638,14 @@ type TransferBadRequestJSONResponse Error
 type TransferNotFoundJSONResponse Error
 
 type ListFundsRequestObject struct {
+	Params ListFundsParams
 }
 
 type ListFundsResponseObject interface {
 	VisitListFundsResponse(w http.ResponseWriter) error
 }
 
-type ListFunds200JSONResponse []Fund
+type ListFunds200JSONResponse FundList
 
 func (response ListFunds200JSONResponse) VisitListFundsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -697,13 +789,14 @@ func (response GetCapTable500JSONResponse) VisitGetCapTableResponse(w http.Respo
 
 type ListTransfersRequestObject struct {
 	FundId FundId `json:"fundId"`
+	Params ListTransfersParams
 }
 
 type ListTransfersResponseObject interface {
 	VisitListTransfersResponse(w http.ResponseWriter) error
 }
 
-type ListTransfers200JSONResponse []Transfer
+type ListTransfers200JSONResponse TransferList
 
 func (response ListTransfers200JSONResponse) VisitListTransfersResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -854,8 +947,10 @@ type strictHandler struct {
 }
 
 // ListFunds operation middleware
-func (sh *strictHandler) ListFunds(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) ListFunds(w http.ResponseWriter, r *http.Request, params ListFundsParams) {
 	var request ListFundsRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListFunds(ctx, request.(ListFundsRequestObject))
@@ -962,10 +1057,11 @@ func (sh *strictHandler) GetCapTable(w http.ResponseWriter, r *http.Request, fun
 }
 
 // ListTransfers operation middleware
-func (sh *strictHandler) ListTransfers(w http.ResponseWriter, r *http.Request, fundId FundId) {
+func (sh *strictHandler) ListTransfers(w http.ResponseWriter, r *http.Request, fundId FundId, params ListTransfersParams) {
 	var request ListTransfersRequestObject
 
 	request.FundId = fundId
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ListTransfers(ctx, request.(ListTransfersRequestObject))

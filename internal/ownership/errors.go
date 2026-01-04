@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/google/uuid"
 )
 
@@ -14,10 +15,10 @@ var ErrNotFound = errors.New("not found")
 var ErrOwnerNotFound = errors.New("owner not found")
 
 // ErrInvalidOwner is returned when owner name fails validation.
-var ErrInvalidOwner = errors.New("invalid owner: name must be non-empty (max 255 chars)")
+var ErrInvalidOwner = fmt.Errorf("invalid owner: name must be non-empty (max %d chars)", validation.MaxNameLength)
 
 // ErrInvalidUnits is returned when units value fails validation.
-var ErrInvalidUnits = errors.New("invalid units: must be >= 0")
+var ErrInvalidUnits = fmt.Errorf("invalid units: must be between 0 and %d", validation.MaxUnits)
 
 // ErrNilEntry is returned when a nil entry is passed to a method that requires a valid entry.
 var ErrNilEntry = errors.New("ownership: cannot operate on nil entry")

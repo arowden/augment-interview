@@ -199,7 +199,7 @@ func TestMigrations(t *testing.T) {
 		version, dirty, err := postgres.MigrateVersion(pool)
 		require.NoError(t, err)
 		assert.False(t, dirty)
-		assert.EqualValues(t, 7, version)
+		assert.EqualValues(t, 8, version)
 	})
 
 	t.Run("funds table exists", func(t *testing.T) {
@@ -268,4 +268,91 @@ func TestRegisterMetrics(t *testing.T) {
 
 	err = postgres.RegisterMetrics(pool)
 	assert.NoError(t, err)
+}
+
+func TestPoolConfig(t *testing.T) {
+	ctx := context.Background()
+	log := testLogger()
+
+	cfg := testContainer.Config()
+	cfg.MaxConns = 10
+	cfg.MinConns = 2
+
+	pool, err := postgres.New(ctx, cfg, log)
+	require.NoError(t, err)
+	defer pool.Close()
+
+	// Test that Config() returns the original config.
+	returnedCfg := pool.Config()
+	assert.Equal(t, cfg.Host, returnedCfg.Host)
+	assert.Equal(t, cfg.Port, returnedCfg.Port)
+	assert.Equal(t, cfg.DBName, returnedCfg.DBName)
+	assert.Equal(t, cfg.User, returnedCfg.User)
+	assert.Equal(t, cfg.MaxConns, returnedCfg.MaxConns)
+	assert.Equal(t, cfg.MinConns, returnedCfg.MinConns)
+}
+
+func TestMigrateDown(t *testing.T) {
+	// This test uses a separate container to avoid affecting other tests.
+	ctx := context.Background()
+
+	tc, err := postgres.NewTestContainer(ctx)
+	require.NoError(t, err)
+	defer tc.Cleanup(ctx)
+
+	pool := tc.Pool()
+
+	// Verify migrations are applied.
+	version, dirty, err := postgres.MigrateVersion(pool)
+	require.NoError(t, err)
+	assert.False(t, dirty)
+	assert.Greater(t, version, uint(0))
+
+	// Roll back all migrations.
+	err = postgres.MigrateDown(pool)
+	require.NoError(t, err)
+
+	// Verify tables no longer exist.
+	var exists bool
+	err = pool.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.tables
+			WHERE table_name = 'funds'
+		)
+	`).Scan(&exists)
+	require.NoError(t, err)
+	assert.False(t, exists, "funds table should not exist after MigrateDown")
+}
+
+func TestMigrateDownNoChange(t *testing.T) {
+	// Test MigrateDown when there's nothing to roll back.
+	ctx := context.Background()
+
+	tc, err := postgres.NewTestContainer(ctx)
+	require.NoError(t, err)
+	defer tc.Cleanup(ctx)
+
+	pool := tc.Pool()
+
+	// Roll back all migrations first.
+	err = postgres.MigrateDown(pool)
+	require.NoError(t, err)
+
+	// Rolling back again should succeed (no change).
+	err = postgres.MigrateDown(pool)
+	require.NoError(t, err)
+}
+
+func TestMigrateUpNoChange(t *testing.T) {
+	pool := testContainer.Pool()
+
+	// Running Migrate when already at latest version should succeed.
+	err := postgres.Migrate(pool)
+	require.NoError(t, err)
+
+	// Verify still at same version.
+	version, dirty, err := postgres.MigrateVersion(pool)
+	require.NoError(t, err)
+	assert.False(t, dirty)
+	assert.EqualValues(t, 8, version)
 }
