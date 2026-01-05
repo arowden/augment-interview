@@ -19,9 +19,9 @@ VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev
 # AWS configuration (override with environment variables)
 AWS_REGION ?= us-west-2
 ENVIRONMENT ?= dev
-ECR_REPO ?= augment-fund-$(ENVIRONMENT)-api
-ECS_CLUSTER ?= augment-fund-$(ENVIRONMENT)
-ECS_SERVICE ?= augment-fund-$(ENVIRONMENT)-api
+ECR_REPO ?= captable-$(ENVIRONMENT)-api
+ECS_CLUSTER ?= captable-$(ENVIRONMENT)
+ECS_SERVICE ?= captable-$(ENVIRONMENT)-api
 S3_BUCKET ?= $(shell cd deploy/terraform && terraform output -raw frontend_bucket_name 2>/dev/null || echo "augment-fund-$(ENVIRONMENT)-frontend")
 
 # Docker configuration
