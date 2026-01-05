@@ -1,9 +1,10 @@
-# Main Terraform configuration for Augment Fund infrastructure
+# Main Terraform configuration for CapTable infrastructure
 
 # VPC Module
 module "vpc" {
   source = "./modules/vpc"
 
+  project_name       = var.project_name
   environment        = var.environment
   aws_region         = var.aws_region
   vpc_cidr           = var.vpc_cidr
@@ -14,13 +15,15 @@ module "vpc" {
 module "ecr" {
   source = "./modules/ecr"
 
-  environment = var.environment
+  project_name = var.project_name
+  environment  = var.environment
 }
 
 # RDS Module
 module "rds" {
   source = "./modules/rds"
 
+  project_name           = var.project_name
   environment            = var.environment
   vpc_id                 = module.vpc.vpc_id
   subnet_ids             = module.vpc.private_subnet_ids
@@ -36,6 +39,7 @@ module "rds" {
 module "ecs" {
   source = "./modules/ecs"
 
+  project_name           = var.project_name
   environment            = var.environment
   aws_region             = var.aws_region
   vpc_id                 = module.vpc.vpc_id
@@ -53,13 +57,15 @@ module "ecs" {
   cpu                    = var.ecs_cpu
   memory                 = var.ecs_memory
   desired_count          = var.ecs_desired_count
+  cors_origins           = "http://localhost:*,http://127.0.0.1:*,${module.frontend.website_url}"
 
-  depends_on = [module.rds]
+  depends_on = [module.rds, module.frontend]
 }
 
 # Frontend Module
 module "frontend" {
   source = "./modules/frontend"
 
-  environment = var.environment
+  project_name = var.project_name
+  environment  = var.environment
 }

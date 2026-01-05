@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"log/slog"
 	"net"
@@ -20,29 +19,13 @@ import (
 	"github.com/arowden/augment-fund/internal/config"
 	"github.com/arowden/augment-fund/internal/fund"
 	apihttp "github.com/arowden/augment-fund/internal/http"
+	"github.com/arowden/augment-fund/internal/otel"
 	"github.com/arowden/augment-fund/internal/ownership"
 	"github.com/arowden/augment-fund/internal/postgres"
 	"github.com/arowden/augment-fund/internal/transfer"
 )
 
-// Version is set at build time via -ldflags.
-var Version = "dev"
-
 func main() {
-	// Parse flags for health check mode.
-	healthCheck := flag.Bool("health-check", false, "Run health check and exit")
-	showVersion := flag.Bool("version", false, "Show version and exit")
-	flag.Parse()
-
-	if *showVersion {
-		fmt.Println(Version)
-		os.Exit(0)
-	}
-
-	if *healthCheck {
-		os.Exit(runHealthCheck())
-	}
-
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -53,27 +36,6 @@ func main() {
 	}
 }
 
-// runHealthCheck performs a health check against the local server.
-// Returns 0 for healthy, 1 for unhealthy.
-func runHealthCheck() int {
-	cfg, err := config.Load()
-	if err != nil {
-		return 1
-	}
-
-	addr := fmt.Sprintf("http://127.0.0.1:%d/healthz", cfg.Server.Port)
-	resp, err := http.Get(addr)
-	if err != nil {
-		return 1
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		return 0
-	}
-	return 1
-}
-
 func run(log *slog.Logger) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -81,6 +43,22 @@ func run(log *slog.Logger) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return err
+	}
+
+	providers, err := otel.Init(ctx, cfg.Telemetry, log)
+	if err != nil {
+		return fmt.Errorf("initializing telemetry: %w", err)
+	}
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		if err := providers.Shutdown(shutdownCtx); err != nil {
+			log.Error("failed to shutdown telemetry", slog.String("error", err.Error()))
+		}
+	}()
+
+	if err := otel.InitMetrics(); err != nil {
+		return fmt.Errorf("initializing metrics: %w", err)
 	}
 
 	pool, err := postgres.New(ctx, cfg.Database, log)
@@ -98,13 +76,10 @@ func run(log *slog.Logger) error {
 		return err
 	}
 
-	// Create stores.
 	fundStore := fund.NewStore(pool.Pool)
 	ownershipStore := ownership.NewStore(pool.Pool)
 	transferStore := transfer.NewStore(pool.Pool)
 
-	// Create services.
-	// Fund service has pool and ownership repo for transactional fund creation.
 	fundSvc, err := fund.NewService(
 		fundStore,
 		fund.WithPool(pool.Pool),
@@ -128,26 +103,24 @@ func run(log *slog.Logger) error {
 		return fmt.Errorf("creating transfer service: %w", err)
 	}
 
-	// Create API handler with strict validation (fail fast if services missing).
 	apiHandler, err := apihttp.NewAPIHandlerStrict(
 		apihttp.WithFundService(fundSvc),
 		apihttp.WithOwnershipService(ownershipSvc),
 		apihttp.WithTransferService(transferSvc),
+		apihttp.WithPool(pool.Pool),
 	)
 	if err != nil {
 		return fmt.Errorf("creating API handler: %w", err)
 	}
 
-	// Create strict handler wrapper.
 	strictHandler := apihttp.NewStrictHandler(apiHandler, nil)
 
-	// Create router.
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http://localhost:*", "http://127.0.0.1:*"},
+		AllowedOrigins:   cfg.Server.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
@@ -155,26 +128,24 @@ func run(log *slog.Logger) error {
 		MaxAge:           300,
 	}))
 
-	// Health check endpoint.
-	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
+		_, _ = w.Write([]byte("ok"))
 	})
 
-	// Mount API routes.
 	apihttp.HandlerFromMux(strictHandler, r)
 
-	// Create HTTP server.
+	handler := otel.WrapHandler(r, "augment-fund-api")
+
 	addr := net.JoinHostPort(cfg.Server.Host, fmt.Sprintf("%d", cfg.Server.Port))
 	srv := &http.Server{
 		Addr:         addr,
-		Handler:      r,
+		Handler:      handler,
 		ReadTimeout:  15 * time.Second,
 		WriteTimeout: 15 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Start server in goroutine.
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("starting HTTP server", slog.String("addr", addr))
@@ -183,7 +154,6 @@ func run(log *slog.Logger) error {
 		}
 	}()
 
-	// Wait for shutdown signal or error.
 	select {
 	case err := <-errCh:
 		return fmt.Errorf("server error: %w", err)
@@ -191,7 +161,6 @@ func run(log *slog.Logger) error {
 		log.Info("shutting down server")
 	}
 
-	// Graceful shutdown.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer shutdownCancel()
 

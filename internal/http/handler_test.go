@@ -1,3 +1,4 @@
+
 package http
 
 import (
@@ -27,7 +28,6 @@ func TestAPIHandler(t *testing.T) {
 	fundStore := fund.NewStore(tc.Pool())
 	ownershipStore := ownership.NewStore(tc.Pool())
 
-	// Fund service needs pool and ownership repo for transactional fund creation.
 	fundService, err := fund.NewService(
 		fundStore,
 		fund.WithPool(tc.Pool()),
@@ -53,7 +53,7 @@ func TestAPIHandler(t *testing.T) {
 		require.True(t, ok)
 		assert.Empty(t, fundList.Funds)
 		assert.Equal(t, 0, fundList.Total)
-		assert.Equal(t, 100, fundList.Limit) // Default limit
+		assert.Equal(t, 100, fundList.Limit)
 		assert.Equal(t, 0, fundList.Offset)
 	})
 
@@ -120,7 +120,6 @@ func TestAPIHandler(t *testing.T) {
 	t.Run("GetFund returns fund by ID", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create fund first.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Lookup Fund",
@@ -131,7 +130,6 @@ func TestAPIHandler(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Get fund.
 		resp, err := handler.GetFund(ctx, GetFundRequestObject{
 			FundId: created.Id,
 		})
@@ -159,7 +157,6 @@ func TestAPIHandler(t *testing.T) {
 	t.Run("GetCapTable returns entries for fund with initial owner", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create fund with initial owner.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Initial Owner Fund",
@@ -170,7 +167,6 @@ func TestAPIHandler(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Get cap table.
 		resp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
 			FundId: created.Id,
 			Params: GetCapTableParams{},
@@ -190,7 +186,6 @@ func TestAPIHandler(t *testing.T) {
 	t.Run("GetCapTable respects pagination params", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create fund with initial owner.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Paginated Fund",
@@ -201,14 +196,11 @@ func TestAPIHandler(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Add 4 more ownership entries (initial owner already has 1500 units).
-		// We need to update the initial owner's units and add others.
 		for i := 1; i <= 4; i++ {
 			entry, _ := ownership.NewCapTableEntry(created.Id, "Owner "+string(rune('A'+i-1)), i*100)
 			require.NoError(t, ownershipStore.Create(ctx, entry))
 		}
 
-		// Get first page (limit 2).
 		limit := 2
 		resp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
 			FundId: created.Id,
@@ -225,11 +217,9 @@ func TestAPIHandler(t *testing.T) {
 		assert.Equal(t, 2, capTable.Limit)
 		assert.Equal(t, 0, capTable.Offset)
 
-		// First two should be highest unit owners (Initial Owner=1500, D=400).
 		assert.Equal(t, "Initial Owner", capTable.Entries[0].OwnerName)
 		assert.Equal(t, "Owner D", capTable.Entries[1].OwnerName)
 
-		// Get second page.
 		offset := 2
 		resp, err = handler.GetCapTable(ctx, GetCapTableRequestObject{
 			FundId: created.Id,
@@ -245,7 +235,6 @@ func TestAPIHandler(t *testing.T) {
 		assert.Len(t, capTable.Entries, 2)
 		assert.Equal(t, 2, capTable.Offset)
 
-		// Next two (C=300, B=200).
 		assert.Equal(t, "Owner C", capTable.Entries[0].OwnerName)
 		assert.Equal(t, "Owner B", capTable.Entries[1].OwnerName)
 	})
@@ -324,7 +313,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("ListTransfers returns empty list for fund with no transfers", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund first.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Transfer Test Fund",
@@ -335,7 +323,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// List transfers - should be empty.
 		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
 			FundId: created.Id,
 			Params: ListTransfersParams{},
@@ -365,7 +352,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer successfully transfers units", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund with initial owner.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Transfer Fund",
@@ -376,7 +362,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Transfer 200 units from Alice to Bob.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -394,7 +379,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		assert.Equal(t, "Bob", transferResp.ToOwner)
 		assert.Equal(t, 200, transferResp.Units)
 
-		// Verify cap table updated.
 		capResp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
 			FundId: created.Id,
 			Params: GetCapTableParams{},
@@ -404,7 +388,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		capTable := capResp.(GetCapTable200JSONResponse)
 		assert.Len(t, capTable.Entries, 2)
 
-		// Find Alice and Bob.
 		var aliceUnits, bobUnits int
 		for _, e := range capTable.Entries {
 			if e.OwnerName == "Alice" {
@@ -437,7 +420,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer returns 404 for non-existent owner", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Owner Test Fund",
@@ -448,7 +430,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Try to transfer from non-existent owner.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -467,7 +448,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer returns 400 for insufficient units", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Insufficient Units Fund",
@@ -478,7 +458,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Try to transfer more units than available.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -497,7 +476,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer returns 400 for self transfer", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Self Transfer Fund",
@@ -508,7 +486,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Try to transfer to self.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -527,7 +504,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer returns 400 for invalid units", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Invalid Units Fund",
@@ -538,7 +514,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Try to transfer zero units.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -557,7 +532,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer returns 400 for invalid owner name", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Invalid Owner Fund",
@@ -568,7 +542,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Try to transfer with empty owner.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -587,7 +560,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer with idempotency key returns same transfer", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Idempotency Fund",
@@ -600,7 +572,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 
 		idempotencyKey := uuid.New()
 
-		// First transfer.
 		resp1, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -613,7 +584,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		transfer1 := resp1.(CreateTransfer201JSONResponse)
 
-		// Second transfer with same key - should return same transfer.
 		resp2, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -628,7 +598,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 
 		assert.Equal(t, transfer1.Id, transfer2.Id)
 
-		// Verify only 100 units were transferred total.
 		capResp, err := handler.GetCapTable(ctx, GetCapTableRequestObject{
 			FundId: created.Id,
 			Params: GetCapTableParams{},
@@ -648,7 +617,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("CreateTransfer returns 409 for duplicate idempotency key with different data", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Duplicate Key Fund",
@@ -661,7 +629,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 
 		idempotencyKey := uuid.New()
 
-		// First transfer.
 		_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -673,13 +640,12 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Second transfer with same key but different amount.
 		resp, err := handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
 				FromOwner:      "Alice",
 				ToOwner:        "Bob",
-				Units:          200, // Different amount!
+				Units:          200,
 				IdempotencyKey: (*openapi_types.UUID)(&idempotencyKey),
 			},
 		})
@@ -693,7 +659,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("ListTransfers returns transfers after creation", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "List Transfers Fund",
@@ -704,7 +669,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Create some transfers.
 		_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
 			FundId: created.Id,
 			Body: &CreateTransferJSONRequestBody{
@@ -725,7 +689,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// List transfers.
 		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
 			FundId: created.Id,
 			Params: ListTransfersParams{},
@@ -740,7 +703,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 	t.Run("ListTransfers respects pagination", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create a fund.
 		createResp, err := handler.CreateFund(ctx, CreateFundRequestObject{
 			Body: &CreateFundJSONRequestBody{
 				Name:         "Pagination Fund",
@@ -751,7 +713,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		require.NoError(t, err)
 		created := createResp.(CreateFund201JSONResponse)
 
-		// Create 3 transfers.
 		for i := 0; i < 3; i++ {
 			_, err = handler.CreateTransfer(ctx, CreateTransferRequestObject{
 				FundId: created.Id,
@@ -764,7 +725,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 			require.NoError(t, err)
 		}
 
-		// Get first page.
 		limit := 2
 		resp, err := handler.ListTransfers(ctx, ListTransfersRequestObject{
 			FundId: created.Id,
@@ -778,7 +738,6 @@ func TestAPIHandler_Transfers(t *testing.T) {
 		assert.Equal(t, 2, transferList.Limit)
 		assert.Equal(t, 0, transferList.Offset)
 
-		// Get second page.
 		offset := 2
 		resp, err = handler.ListTransfers(ctx, ListTransfersRequestObject{
 			FundId: created.Id,

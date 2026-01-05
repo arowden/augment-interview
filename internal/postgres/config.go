@@ -7,7 +7,6 @@ import (
 	"time"
 )
 
-// Config holds PostgreSQL connection pool configuration.
 type Config struct {
 	Host     string `envconfig:"DB_HOST" required:"true"`
 	Port     int    `envconfig:"DB_PORT" default:"5432"`
@@ -22,7 +21,6 @@ type Config struct {
 	MaxConnIdleTime time.Duration `envconfig:"DB_MAX_CONN_IDLE_TIME" default:"10m"`
 }
 
-// DSN returns the PostgreSQL connection string with properly encoded credentials.
 func (c Config) DSN() string {
 	u := &url.URL{
 		Scheme: "postgres",

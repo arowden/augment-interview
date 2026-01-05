@@ -10,26 +10,16 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-// DB defines the database operations required by the store.
 type DB interface {
 	Exec(ctx context.Context, sql string, arguments ...any) (pgconn.CommandTag, error)
 	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
 	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
 }
 
-// Store implements Repository using a database.
-// All methods respect context cancellation and deadlines; callers should
-// set appropriate timeouts via context.WithTimeout for production use.
-//
-// Required indexes (see migrations/006_add_funds_indexes.up.sql):
-//   - idx_funds_created_at: (created_at DESC, id DESC) for ordered list queries
-//   - idx_funds_name: UNIQUE (name) for duplicate name prevention
 type Store struct {
 	db DB
 }
 
-// NewStore creates a new Store.
-// Returns nil if db is nil.
 func NewStore(db DB) *Store {
 	if db == nil {
 		return nil
@@ -37,12 +27,10 @@ func NewStore(db DB) *Store {
 	return &Store{db: db}
 }
 
-// Create persists a new fund to the database.
 func (s *Store) Create(ctx context.Context, fund *Fund) error {
 	return s.create(ctx, s.db, fund)
 }
 
-// CreateTx persists a new fund within the provided transaction.
 func (s *Store) CreateTx(ctx context.Context, tx pgx.Tx, fund *Fund) error {
 	return s.create(ctx, tx, fund)
 }
@@ -58,7 +46,6 @@ func (s *Store) create(ctx context.Context, db DB, fund *Fund) error {
 	`
 	_, err := db.Exec(ctx, query, fund.ID, fund.Name, fund.TotalUnits, fund.CreatedAt)
 	if err != nil {
-		// Check for unique constraint violation (PostgreSQL error code 23505)
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 			return fmt.Errorf("%w: %s", ErrDuplicateFundName, fund.Name)
@@ -68,7 +55,6 @@ func (s *Store) create(ctx context.Context, db DB, fund *Fund) error {
 	return nil
 }
 
-// FindByID retrieves a fund by its UUID.
 func (s *Store) FindByID(ctx context.Context, id uuid.UUID) (*Fund, error) {
 	const query = `
 		SELECT id, name, total_units, created_at
@@ -91,11 +77,9 @@ func (s *Store) FindByID(ctx context.Context, id uuid.UUID) (*Fund, error) {
 	return &fund, nil
 }
 
-// List retrieves funds with pagination, ordered by created_at descending.
 func (s *Store) List(ctx context.Context, params ListParams) (*ListResult, error) {
 	params = params.Normalize()
 
-	// Single query with window function for count and pagination.
 	const query = `
 		SELECT id, name, total_units, created_at, COUNT(*) OVER() AS total
 		FROM funds
@@ -121,8 +105,6 @@ func (s *Store) List(ctx context.Context, params ListParams) (*ListResult, error
 		return nil, fmt.Errorf("iterate fund rows: %w", err)
 	}
 
-	// When offset exceeds total rows, window function returns no rows.
-	// Fall back to count query to get the actual total.
 	if len(funds) == 0 && params.Offset > 0 {
 		const countQuery = `SELECT COUNT(*) FROM funds`
 		if err := s.db.QueryRow(ctx, countQuery).Scan(&total); err != nil {

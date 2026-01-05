@@ -1,7 +1,8 @@
 # ECR Repository for API
 resource "aws_ecr_repository" "api" {
-  name                 = "augment-fund-${var.environment}-api"
+  name                 = "${var.project_name}-${var.environment}-api"
   image_tag_mutability = "MUTABLE"
+  force_delete         = true
 
   image_scanning_configuration {
     scan_on_push = true
@@ -12,7 +13,7 @@ resource "aws_ecr_repository" "api" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-api"
+    Name = "${var.project_name}-${var.environment}-api"
   }
 }
 

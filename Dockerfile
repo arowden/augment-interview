@@ -1,8 +1,5 @@
-# Stage 1: Build with instrumentation
-FROM golang:1.22-bookworm AS builder
-
-# Pin orchestrion version for reproducibility
-RUN go install github.com/DataDog/orchestrion@v0.18.0
+# Stage 1: Build
+FROM golang:1.24-bookworm AS builder
 
 WORKDIR /app
 
@@ -13,10 +10,10 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 COPY . .
 
-# Build with instrumentation and stripped debug info
+# Build with stripped debug info
 ARG VERSION=dev
 RUN --mount=type=cache,target=/go/pkg/mod \
-    orchestrion go build \
+    CGO_ENABLED=0 go build \
     -ldflags="-s -w -X main.Version=${VERSION}" \
     -o /app/server ./cmd/server
 

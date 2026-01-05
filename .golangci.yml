@@ -1,0 +1,35 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - gosimple
+    - ineffassign
+    - unused
+    - misspell
+    - gofmt
+    - goimports
+    - gocritic
+    - revive
+
+linters-settings:
+  errcheck:
+    exclude-functions:
+      # pgx transaction rollback in defer is idiomatic Go
+      - (github.com/jackc/pgx/v5.Tx).Rollback
+      # http.ResponseWriter.Write errors are typically unrecoverable
+      - (net/http.ResponseWriter).Write
+  revive:
+    rules:
+      # Allow stuttering for API types that match OpenAPI schema names
+      - name: exported
+        arguments:
+          - disableStutteringCheck
+
+issues:
+  exclude-files:
+    - ".*_gen\\.go$"
+    - "openapi\\.gen\\.go$"

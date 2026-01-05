@@ -5,29 +5,29 @@ resource "aws_kms_key" "rds" {
   enable_key_rotation     = true
 
   tags = {
-    Name = "augment-fund-${var.environment}-rds-key"
+    Name = "${var.project_name}-${var.environment}-rds-key"
   }
 }
 
 resource "aws_kms_alias" "rds" {
-  name          = "alias/augment-fund-${var.environment}-rds"
+  name          = "alias/${var.project_name}-${var.environment}-rds"
   target_key_id = aws_kms_key.rds.key_id
 }
 
 # DB Subnet Group
 resource "aws_db_subnet_group" "main" {
-  name       = "augment-fund-${var.environment}"
+  name       = "${var.project_name}-${var.environment}"
   subnet_ids = var.subnet_ids
 
   tags = {
-    Name = "augment-fund-${var.environment}-db-subnet-group"
+    Name = "${var.project_name}-${var.environment}-db-subnet-group"
   }
 }
 
 # DB Parameter Group
 resource "aws_db_parameter_group" "main" {
   family = "postgres16"
-  name   = "augment-fund-${var.environment}-params"
+  name   = "${var.project_name}-${var.environment}-params"
 
   parameter {
     name  = "log_min_duration_statement"
@@ -40,7 +40,7 @@ resource "aws_db_parameter_group" "main" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-params"
+    Name = "${var.project_name}-${var.environment}-params"
   }
 }
 
@@ -55,7 +55,7 @@ locals {
 
 # RDS PostgreSQL Instance
 resource "aws_db_instance" "main" {
-  identifier = "augment-fund-${var.environment}"
+  identifier = "${var.project_name}-${var.environment}"
 
   engine         = "postgres"
   engine_version = "16"
@@ -84,12 +84,18 @@ resource "aws_db_instance" "main" {
 
   deletion_protection       = var.environment == "prod" ? true : false
   skip_final_snapshot       = var.environment == "prod" ? false : true
-  final_snapshot_identifier = var.environment == "prod" ? "augment-fund-${var.environment}-final" : null
+  final_snapshot_identifier = var.environment == "prod" ? "${var.project_name}-${var.environment}-final" : null
   copy_tags_to_snapshot     = true
 
   performance_insights_enabled = false
 
   tags = {
-    Name = "augment-fund-${var.environment}-db"
+    Name = "${var.project_name}-${var.environment}-db"
+  }
+
+  # AWS doesn't allow changing subnet group within the same VPC
+  # The identifier and subnet group name are not user-facing, so we ignore changes
+  lifecycle {
+    ignore_changes = [identifier, db_subnet_group_name]
   }
 }

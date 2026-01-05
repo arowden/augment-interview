@@ -71,7 +71,7 @@ func TestErrorDetails(t *testing.T) {
 }
 
 func TestListFunds_NilService(t *testing.T) {
-	h := NewAPIHandler() // No services configured
+	h := NewAPIHandler()
 
 	resp, err := h.ListFunds(context.Background(), ListFundsRequestObject{})
 	require.NoError(t, err)
@@ -83,7 +83,7 @@ func TestListFunds_NilService(t *testing.T) {
 }
 
 func TestCreateFund_NilService(t *testing.T) {
-	h := NewAPIHandler() // No services configured
+	h := NewAPIHandler()
 
 	resp, err := h.CreateFund(context.Background(), CreateFundRequestObject{
 		Body: &CreateFundJSONRequestBody{
@@ -100,13 +100,9 @@ func TestCreateFund_NilService(t *testing.T) {
 	assert.Contains(t, errResp.Message, "fund service not configured")
 }
 
-// Note: TestCreateFund_NilBody is covered in the integration tests
-// because the nil body check only runs after service validation.
-// The handler checks service first, then body. Without a real service,
-// we can't test the nil body path in isolation.
 
 func TestGetFund_NilService(t *testing.T) {
-	h := NewAPIHandler() // No services configured
+	h := NewAPIHandler()
 
 	resp, err := h.GetFund(context.Background(), GetFundRequestObject{})
 	require.NoError(t, err)
@@ -118,7 +114,7 @@ func TestGetFund_NilService(t *testing.T) {
 }
 
 func TestGetCapTable_NilService(t *testing.T) {
-	h := NewAPIHandler() // No services configured
+	h := NewAPIHandler()
 
 	resp, err := h.GetCapTable(context.Background(), GetCapTableRequestObject{})
 	require.NoError(t, err)
@@ -130,7 +126,7 @@ func TestGetCapTable_NilService(t *testing.T) {
 }
 
 func TestListTransfers_NilService(t *testing.T) {
-	h := NewAPIHandler() // No services configured
+	h := NewAPIHandler()
 
 	resp, err := h.ListTransfers(context.Background(), ListTransfersRequestObject{})
 	require.NoError(t, err)
@@ -142,7 +138,7 @@ func TestListTransfers_NilService(t *testing.T) {
 }
 
 func TestCreateTransfer_NilService(t *testing.T) {
-	h := NewAPIHandler() // No services configured
+	h := NewAPIHandler()
 
 	resp, err := h.CreateTransfer(context.Background(), CreateTransferRequestObject{
 		Body: &CreateTransferJSONRequestBody{
@@ -159,13 +155,8 @@ func TestCreateTransfer_NilService(t *testing.T) {
 	assert.Contains(t, errResp.Message, "transfer service not configured")
 }
 
-// Note: TestCreateTransfer_NilBody is covered in the integration tests
-// because the nil body check only runs after service validation.
-// The handler checks service first, then body. Without a real service,
-// we can't test the nil body path in isolation.
 
 func TestLogError(t *testing.T) {
-	// Capture log output.
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, nil))
 	slog.SetDefault(logger)
@@ -243,8 +234,6 @@ func TestWithTransferService(t *testing.T) {
 }
 
 func TestNewAPIHandlerStrict_AllServices(t *testing.T) {
-	// We can't easily create real services here, but we can verify the
-	// validation logic by testing with nil services.
 	t.Run("returns error listing all missing services", func(t *testing.T) {
 		h, err := NewAPIHandlerStrict()
 		assert.Nil(t, h)

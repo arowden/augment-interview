@@ -12,10 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
-//go:embed migrations/*.sql
 var migrations embed.FS
 
-// Migrate runs all pending database migrations.
 func Migrate(pool *pgxpool.Pool) error {
 	source, err := iofs.New(migrations, "migrations")
 	if err != nil {
@@ -42,7 +40,6 @@ func Migrate(pool *pgxpool.Pool) error {
 	return nil
 }
 
-// MigrateDown rolls back all migrations.
 func MigrateDown(pool *pgxpool.Pool) error {
 	source, err := iofs.New(migrations, "migrations")
 	if err != nil {
@@ -69,7 +66,6 @@ func MigrateDown(pool *pgxpool.Pool) error {
 	return nil
 }
 
-// MigrateVersion returns the current migration version.
 func MigrateVersion(pool *pgxpool.Pool) (uint, bool, error) {
 	source, err := iofs.New(migrations, "migrations")
 	if err != nil {

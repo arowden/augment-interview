@@ -38,11 +38,9 @@ export function CreateFundModal({
     },
   });
 
-  // Focus trap and escape key handling.
   useEffect(() => {
     if (!isOpen) return;
 
-    // Focus the first input when modal opens.
     firstInputRef.current?.focus();
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -51,7 +49,6 @@ export function CreateFundModal({
         return;
       }
 
-      // Focus trap.
       if (event.key === 'Tab' && modalRef.current) {
         const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
           'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
@@ -73,7 +70,6 @@ export function CreateFundModal({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
-  // Reset form when modal closes.
   useEffect(() => {
     if (!isOpen) {
       reset();
@@ -93,36 +89,38 @@ export function CreateFundModal({
       role="dialog"
       aria-modal="true"
     >
-      {/* Backdrop. */}
+      {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+        className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
-      {/* Modal. */}
+      {/* Modal */}
       <div className="flex min-h-full items-center justify-center p-4">
         <div
           ref={modalRef}
-          className="relative w-full max-w-md transform rounded-lg bg-white p-6 shadow-xl transition-all"
+          className="relative w-full max-w-md card p-6 animate-slide-up"
         >
-          <h2
-            id="modal-title"
-            className="text-lg font-semibold text-gray-900"
-          >
-            Create New Fund
-          </h2>
+          <div className="flex items-center justify-between mb-6">
+            <h2 id="modal-title" className="text-lg font-semibold text-white">
+              Create Fund
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
 
-          <form
-            onSubmit={handleSubmit(handleFormSubmit)}
-            className="mt-4 space-y-4"
-          >
-            {/* Name field. */}
+          <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-5">
+            {/* Name field */}
             <div>
-              <label
-                htmlFor="fund-name"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="fund-name" className="label">
                 Fund Name
               </label>
               <input
@@ -135,28 +133,19 @@ export function CreateFundModal({
                 id="fund-name"
                 aria-invalid={errors.name ? 'true' : 'false'}
                 aria-describedby={errors.name ? 'name-error' : undefined}
-                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus-visible-ring text-gray-900 placeholder:text-gray-400 ${
-                  errors.name ? 'border-error-500' : 'border-gray-300'
-                }`}
+                className={`input ${errors.name ? 'input-error' : ''}`}
                 placeholder="Growth Fund I"
               />
               {errors.name && (
-                <p
-                  id="name-error"
-                  role="alert"
-                  className="mt-1 text-sm text-error-500"
-                >
+                <p id="name-error" role="alert" className="mt-1.5 text-sm text-red-400">
                   {errors.name.message}
                 </p>
               )}
             </div>
 
-            {/* Total Units field. */}
+            {/* Total Units field */}
             <div>
-              <label
-                htmlFor="total-units"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="total-units" className="label">
                 Total Units
               </label>
               <input
@@ -165,28 +154,19 @@ export function CreateFundModal({
                 id="total-units"
                 aria-invalid={errors.totalUnits ? 'true' : 'false'}
                 aria-describedby={errors.totalUnits ? 'units-error' : undefined}
-                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus-visible-ring text-gray-900 placeholder:text-gray-400 ${
-                  errors.totalUnits ? 'border-error-500' : 'border-gray-300'
-                }`}
+                className={`input ${errors.totalUnits ? 'input-error' : ''}`}
                 placeholder="1000000"
               />
               {errors.totalUnits && (
-                <p
-                  id="units-error"
-                  role="alert"
-                  className="mt-1 text-sm text-error-500"
-                >
+                <p id="units-error" role="alert" className="mt-1.5 text-sm text-red-400">
                   {errors.totalUnits.message}
                 </p>
               )}
             </div>
 
-            {/* Initial Owner field. */}
+            {/* Initial Owner field */}
             <div>
-              <label
-                htmlFor="initial-owner"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="initial-owner" className="label">
                 Initial Owner
               </label>
               <input
@@ -195,41 +175,27 @@ export function CreateFundModal({
                 id="initial-owner"
                 aria-invalid={errors.initialOwner ? 'true' : 'false'}
                 aria-describedby={errors.initialOwner ? 'owner-error' : undefined}
-                className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus-visible-ring text-gray-900 placeholder:text-gray-400 ${
-                  errors.initialOwner ? 'border-error-500' : 'border-gray-300'
-                }`}
+                className={`input ${errors.initialOwner ? 'input-error' : ''}`}
                 placeholder="Founder LLC"
               />
               {errors.initialOwner && (
-                <p
-                  id="owner-error"
-                  role="alert"
-                  className="mt-1 text-sm text-error-500"
-                >
+                <p id="owner-error" role="alert" className="mt-1.5 text-sm text-red-400">
                   {errors.initialOwner.message}
                 </p>
               )}
             </div>
 
-            {/* API error. */}
+            {/* API error */}
             {error != null && (
               <ApiErrorAlert error={error} fallbackMessage="Failed to create fund" />
             )}
 
-            {/* Actions. */}
-            <div className="mt-6 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible-ring"
-              >
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-2">
+              <button type="button" onClick={onClose} className="btn-secondary">
                 Cancel
               </button>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus-visible-ring disabled:opacity-50 disabled:cursor-not-allowed"
-              >
+              <button type="submit" disabled={isLoading} className="btn-primary">
                 {isLoading && <LoadingSpinner size="sm" className="mr-2" />}
                 Create Fund
               </button>

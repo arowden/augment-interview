@@ -11,14 +11,12 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// TestContainer wraps a PostgreSQL test container.
 type TestContainer struct {
 	container testcontainers.Container
 	pool      *pgxpool.Pool
 	cfg       Config
 }
 
-// NewTestContainer creates a new PostgreSQL container for testing.
 func NewTestContainer(ctx context.Context) (*TestContainer, error) {
 	pgContainer, err := postgres.Run(ctx,
 		"postgres:16-alpine",
@@ -37,13 +35,13 @@ func NewTestContainer(ctx context.Context) (*TestContainer, error) {
 
 	host, err := pgContainer.Host(ctx)
 	if err != nil {
-		pgContainer.Terminate(ctx)
+		_ = pgContainer.Terminate(ctx)
 		return nil, fmt.Errorf("failed to get container host: %w", err)
 	}
 
 	port, err := pgContainer.MappedPort(ctx, "5432")
 	if err != nil {
-		pgContainer.Terminate(ctx)
+		_ = pgContainer.Terminate(ctx)
 		return nil, fmt.Errorf("failed to get container port: %w", err)
 	}
 
@@ -62,7 +60,7 @@ func NewTestContainer(ctx context.Context) (*TestContainer, error) {
 
 	pool, err := pgxpool.New(ctx, cfg.DSN())
 	if err != nil {
-		pgContainer.Terminate(ctx)
+		_ = pgContainer.Terminate(ctx)
 		return nil, fmt.Errorf("failed to create pool: %w", err)
 	}
 
@@ -73,29 +71,25 @@ func NewTestContainer(ctx context.Context) (*TestContainer, error) {
 	}
 
 	if err := tc.Migrate(ctx); err != nil {
-		tc.Cleanup(ctx)
+		_ = tc.Cleanup(ctx)
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
 	return tc, nil
 }
 
-// Pool returns the connection pool for the test container.
 func (tc *TestContainer) Pool() *pgxpool.Pool {
 	return tc.pool
 }
 
-// Config returns the configuration for the test container.
 func (tc *TestContainer) Config() Config {
 	return tc.cfg
 }
 
-// Migrate runs all database migrations.
 func (tc *TestContainer) Migrate(_ context.Context) error {
 	return Migrate(tc.pool)
 }
 
-// Cleanup terminates the container and closes the pool.
 func (tc *TestContainer) Cleanup(ctx context.Context) error {
 	if tc.pool != nil {
 		tc.pool.Close()
@@ -106,7 +100,6 @@ func (tc *TestContainer) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-// Reset truncates all tables except schema_migrations.
 func (tc *TestContainer) Reset(ctx context.Context) error {
 	_, err := tc.pool.Exec(ctx, `
 		TRUNCATE TABLE transfers, cap_table_entries, funds CASCADE

@@ -20,9 +20,9 @@ export function FundCard({ fund }: FundCardProps) {
   };
 
   const formattedDate = new Date(fund.createdAt).toLocaleDateString('en-US', {
-    year: 'numeric',
     month: 'short',
     day: 'numeric',
+    year: 'numeric',
   });
 
   return (
@@ -31,40 +31,33 @@ export function FundCard({ fund }: FundCardProps) {
       tabIndex={0}
       onClick={handleClick}
       onKeyDown={handleKeyDown}
-      className="group cursor-pointer glass-card p-6 hover:border-primary-500/30 focus-ring"
-      aria-label={`View ${fund.name} fund details`}
+      className="group card-interactive p-5 focus-ring"
+      aria-label={`View ${fund.name} details`}
     >
-      {/* Card header */}
-      <div className="flex items-start justify-between">
+      <div className="flex items-start justify-between gap-4">
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-heading font-semibold text-slate-100 truncate group-hover:text-primary-400 transition-colors">
+          <h3 className="font-medium text-white truncate group-hover:text-indigo-400 transition-colors">
             {fund.name}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Created {formattedDate}
+            {formattedDate}
           </p>
         </div>
-        <div className="ml-4 flex-shrink-0">
-          <div className="w-10 h-10 rounded-xl bg-primary-500/10 flex items-center justify-center group-hover:bg-primary-500/20 transition-colors">
-            <svg className="w-5 h-5 text-primary-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-            </svg>
-          </div>
+        <div className="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 group-hover:bg-indigo-500/10 transition-colors">
+          <svg className="w-5 h-5 text-slate-500 group-hover:text-indigo-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+          </svg>
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="mt-6 pt-4 border-t border-white/[0.06]">
-        <div className="flex items-baseline justify-between">
-          <span className="text-sm text-slate-400">Total Units</span>
-          <span className="text-xl font-heading font-semibold text-slate-200">
+      <div className="mt-4 pt-4 border-t border-slate-800/50">
+        <div className="flex items-center justify-between">
+          <span className="text-sm text-slate-500">Units</span>
+          <span className="text-lg font-semibold text-white tabular-nums">
             {fund.totalUnits.toLocaleString()}
           </span>
         </div>
       </div>
-
-      {/* Decorative gradient line */}
-      <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary-500/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity rounded-b-2xl" />
     </div>
   );
 }

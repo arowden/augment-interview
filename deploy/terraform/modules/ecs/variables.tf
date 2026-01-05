@@ -1,3 +1,8 @@
+variable "project_name" {
+  description = "Project name used for resource naming"
+  type        = string
+}
+
 variable "environment" {
   description = "Environment name"
   type        = string
@@ -91,4 +96,10 @@ variable "domain_name" {
   description = "Domain name for ACM certificate (optional, uses self-signed if not provided)"
   type        = string
   default     = ""
+}
+
+variable "cors_origins" {
+  description = "Allowed CORS origins"
+  type        = string
+  default     = "http://localhost:*,http://127.0.0.1:*"
 }

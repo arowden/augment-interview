@@ -78,6 +78,7 @@ export function FundPage() {
           entries={capTable?.entries ?? []}
           totalUnits={fund.totalUnits}
           isLoading={capTableLoading}
+          transfers={transferList?.transfers ?? []}
         />
       </section>
 

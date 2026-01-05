@@ -31,7 +31,6 @@ const ERROR_MESSAGES: Record<ApiErrorBody['code'], string> = {
  * Works with both ApiError from the generated client and generic errors.
  */
 export function parseApiError(error: unknown): ParsedApiError {
-  // Handle generated ApiError.
   if (error instanceof ApiError) {
     const body = error.body as ApiErrorBody | undefined;
 
@@ -45,7 +44,6 @@ export function parseApiError(error: unknown): ParsedApiError {
       };
     }
 
-    // ApiError without structured body.
     return {
       code: 'UNKNOWN',
       message: error.message || 'An unexpected error occurred',
@@ -53,7 +51,6 @@ export function parseApiError(error: unknown): ParsedApiError {
     };
   }
 
-  // Handle generic Error.
   if (error instanceof Error) {
     return {
       code: 'UNKNOWN',
@@ -62,7 +59,6 @@ export function parseApiError(error: unknown): ParsedApiError {
     };
   }
 
-  // Handle unknown error types.
   return {
     code: 'UNKNOWN',
     message: 'An unexpected error occurred',

@@ -1,16 +1,16 @@
 # CloudWatch Log Group
 resource "aws_cloudwatch_log_group" "ecs" {
-  name              = "/ecs/augment-fund-${var.environment}"
+  name              = "/ecs/${var.project_name}-${var.environment}"
   retention_in_days = 7
 
   tags = {
-    Name = "augment-fund-${var.environment}-ecs-logs"
+    Name = "${var.project_name}-${var.environment}-ecs-logs"
   }
 }
 
 # ECS Cluster
 resource "aws_ecs_cluster" "main" {
-  name = "augment-fund-${var.environment}"
+  name = "${var.project_name}-${var.environment}"
 
   setting {
     name  = "containerInsights"
@@ -18,13 +18,13 @@ resource "aws_ecs_cluster" "main" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-cluster"
+    Name = "${var.project_name}-${var.environment}-cluster"
   }
 }
 
 # ECS Task Execution Role
 resource "aws_iam_role" "ecs_execution" {
-  name = "augment-fund-${var.environment}-ecs-execution"
+  name = "${var.project_name}-${var.environment}-ecs-execution"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -39,7 +39,7 @@ resource "aws_iam_role" "ecs_execution" {
 }
 
 resource "aws_iam_role_policy" "ecs_execution" {
-  name = "augment-fund-${var.environment}-ecs-execution-policy"
+  name = "${var.project_name}-${var.environment}-ecs-execution-policy"
   role = aws_iam_role.ecs_execution.id
 
   policy = jsonencode({
@@ -82,7 +82,7 @@ resource "aws_iam_role_policy" "ecs_execution" {
 
 # ECS Task Role
 resource "aws_iam_role" "ecs_task" {
-  name = "augment-fund-${var.environment}-ecs-task"
+  name = "${var.project_name}-${var.environment}-ecs-task"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -98,7 +98,7 @@ resource "aws_iam_role" "ecs_task" {
 
 # ECS Task Definition
 resource "aws_ecs_task_definition" "api" {
-  family                   = "augment-fund-${var.environment}-api"
+  family                   = "${var.project_name}-${var.environment}-api"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
   cpu                      = var.cpu
@@ -131,7 +131,8 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DB_USER", value = var.db_username },
         { name = "DB_SSLMODE", value = "require" },
         { name = "SERVER_HOST", value = "0.0.0.0" },
-        { name = "SERVER_PORT", value = tostring(var.container_port) }
+        { name = "SERVER_PORT", value = tostring(var.container_port) },
+        { name = "CORS_ORIGINS", value = var.cors_origins }
       ]
 
       logConfiguration = {
@@ -154,13 +155,13 @@ resource "aws_ecs_task_definition" "api" {
   ])
 
   tags = {
-    Name = "augment-fund-${var.environment}-api-task"
+    Name = "${var.project_name}-${var.environment}-api-task"
   }
 }
 
 # Application Load Balancer
 resource "aws_lb" "main" {
-  name               = "augment-fund-${var.environment}"
+  name               = "${var.project_name}-${var.environment}"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [var.alb_security_group_id]
@@ -169,13 +170,13 @@ resource "aws_lb" "main" {
   enable_deletion_protection = var.environment == "prod" ? true : false
 
   tags = {
-    Name = "augment-fund-${var.environment}-alb"
+    Name = "${var.project_name}-${var.environment}-alb"
   }
 }
 
 # Target Group
 resource "aws_lb_target_group" "main" {
-  name        = "augment-fund-${var.environment}"
+  name        = "${var.project_name}-${var.environment}"
   port        = var.container_port
   protocol    = "HTTP"
   vpc_id      = var.vpc_id
@@ -194,7 +195,7 @@ resource "aws_lb_target_group" "main" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-tg"
+    Name = "${var.project_name}-${var.environment}-tg"
   }
 }
 
@@ -209,7 +210,7 @@ resource "aws_acm_certificate" "main" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-cert"
+    Name = "${var.project_name}-${var.environment}-cert"
   }
 }
 
@@ -252,7 +253,7 @@ resource "aws_lb_listener" "http" {
 
 # ECS Service
 resource "aws_ecs_service" "api" {
-  name            = "augment-fund-${var.environment}-api"
+  name            = "${var.project_name}-${var.environment}-api"
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.api.arn
   desired_count   = var.desired_count
@@ -270,14 +271,12 @@ resource "aws_ecs_service" "api" {
     container_port   = var.container_port
   }
 
-  deployment_configuration {
-    minimum_healthy_percent = 50
-    maximum_percent         = 200
-  }
+  deployment_minimum_healthy_percent = 50
+  deployment_maximum_percent         = 200
 
   depends_on = [aws_lb_listener.http]
 
   tags = {
-    Name = "augment-fund-${var.environment}-api-service"
+    Name = "${var.project_name}-${var.environment}-api-service"
   }
 }

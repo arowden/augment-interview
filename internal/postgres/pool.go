@@ -1,4 +1,3 @@
-// Package postgres provides PostgreSQL connection pool and migration utilities.
 package postgres
 
 import (
@@ -10,14 +9,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Pool wraps pgxpool.Pool with additional functionality.
 type Pool struct {
 	*pgxpool.Pool
 	cfg Config
 	log *slog.Logger
 }
 
-// New creates a new connection pool with OpenTelemetry instrumentation.
 func New(ctx context.Context, cfg Config, log *slog.Logger) (*Pool, error) {
 	dsn := cfg.DSN()
 
@@ -62,12 +59,10 @@ func New(ctx context.Context, cfg Config, log *slog.Logger) (*Pool, error) {
 	}, nil
 }
 
-// Config returns the pool configuration.
 func (p *Pool) Config() Config {
 	return p.cfg
 }
 
-// HealthCheck verifies the database connection is healthy.
 func (p *Pool) HealthCheck(ctx context.Context) error {
 	return p.Ping(ctx)
 }

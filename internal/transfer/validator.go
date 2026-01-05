@@ -8,16 +8,12 @@ import (
 	"github.com/arowden/augment-fund/internal/validation"
 )
 
-// Validator validates transfer requests.
 type Validator struct{}
 
-// NewValidator creates a new Validator.
 func NewValidator() *Validator {
 	return &Validator{}
 }
 
-// ValidateBasic performs format validation without ownership lookup.
-// Checks: owner names valid (non-empty, max length), units in valid range, from != to.
 func (v *Validator) ValidateBasic(req Request) error {
 	fromOwner := strings.TrimSpace(req.FromOwner)
 	toOwner := strings.TrimSpace(req.ToOwner)
@@ -37,8 +33,6 @@ func (v *Validator) ValidateBasic(req Request) error {
 	return nil
 }
 
-// Validate performs full validation including ownership checks.
-// The fromEntry must be provided (looked up by caller with lock).
 func (v *Validator) Validate(req Request, fromEntry *ownership.Entry) error {
 	if err := v.ValidateBasic(req); err != nil {
 		return err

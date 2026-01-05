@@ -12,12 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockRepository implements Repository for testing.
 type mockRepository struct {
-	findByFundIDFunc        func(ctx context.Context, fundID uuid.UUID, params ListParams) (*TransferList, error)
+	findByFundIDFunc         func(ctx context.Context, fundID uuid.UUID, params ListParams) (*TransferList, error)
 	findByIdempotencyKeyFunc func(ctx context.Context, tx pgx.Tx, key uuid.UUID) (*Transfer, error)
-	createFunc              func(ctx context.Context, t *Transfer) error
-	createTxFunc            func(ctx context.Context, tx pgx.Tx, t *Transfer) error
+	createFunc               func(ctx context.Context, t *Transfer) error
+	createTxFunc             func(ctx context.Context, tx pgx.Tx, t *Transfer) error
 }
 
 func (m *mockRepository) FindByFundID(ctx context.Context, fundID uuid.UUID, params ListParams) (*TransferList, error) {
@@ -48,7 +47,6 @@ func (m *mockRepository) CreateTx(ctx context.Context, tx pgx.Tx, t *Transfer) e
 	return nil
 }
 
-// mockOwnershipRepository implements ownership.Repository for testing.
 type mockOwnershipRepository struct{}
 
 func (m *mockOwnershipRepository) Create(ctx context.Context, entry *ownership.Entry) error {
@@ -117,11 +115,8 @@ func TestNewService(t *testing.T) {
 }
 
 func TestService_ExecuteTransfer_Validation(t *testing.T) {
-	// Note: We can't fully test ExecuteTransfer without a real pool,
-	// but we can test that validation fails before pool usage.
 
 	t.Run("returns error for empty from_owner", func(t *testing.T) {
-		// We need a minimal service with just the validator
 		svc := &Service{validator: NewValidator()}
 
 		req := Request{
@@ -193,8 +188,6 @@ func TestService_ExecuteTransfer_Validation(t *testing.T) {
 }
 
 func TestService_ListTransfers(t *testing.T) {
-	// This test requires a service with at least a repo configured.
-	// We'll test that ListTransfers correctly delegates to the repository.
 
 	fundID := uuid.New()
 	expectedList := &TransferList{
@@ -213,7 +206,6 @@ func TestService_ListTransfers(t *testing.T) {
 			},
 		}
 
-		// Create minimal service with just the repo (bypassing constructor validation for test)
 		svc := &Service{repo: repo, validator: NewValidator()}
 
 		result, err := svc.ListTransfers(context.Background(), fundID, ListParams{})

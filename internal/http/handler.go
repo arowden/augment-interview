@@ -12,10 +12,9 @@ import (
 	"github.com/arowden/augment-fund/internal/validation"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// logError logs an error with structured context for debugging.
-// Always includes the request ID for correlation.
 func logError(ctx context.Context, msg string, err error, extraAttrs ...slog.Attr) {
 	attrs := make([]slog.Attr, 0, len(extraAttrs)+2)
 	attrs = append(attrs, slog.String("error", err.Error()))
@@ -26,17 +25,13 @@ func logError(ctx context.Context, msg string, err error, extraAttrs ...slog.Att
 	slog.LogAttrs(ctx, slog.LevelError, msg, attrs...)
 }
 
-// errorDetails creates a details map with the request ID for traceability.
-// Always includes requestId if available from context.
 func errorDetails(ctx context.Context, extra map[string]interface{}) *map[string]interface{} {
 	details := make(map[string]interface{})
 
-	// Add request ID for traceability.
 	if reqID := middleware.GetReqID(ctx); reqID != "" {
 		details["requestId"] = reqID
 	}
 
-	// Merge any extra details.
 	for k, v := range extra {
 		details[k] = v
 	}
@@ -47,39 +42,39 @@ func errorDetails(ctx context.Context, extra map[string]interface{}) *map[string
 	return &details
 }
 
-// APIHandler implements the StrictServerInterface for the OpenAPI spec.
 type APIHandler struct {
 	fundService      *fund.Service
 	ownershipService *ownership.Service
 	transferService  *transfer.Service
+	pool             *pgxpool.Pool
 }
 
-// APIHandlerOption configures an APIHandler.
 type APIHandlerOption func(*APIHandler)
 
-// WithFundService sets the fund service.
 func WithFundService(svc *fund.Service) APIHandlerOption {
 	return func(h *APIHandler) {
 		h.fundService = svc
 	}
 }
 
-// WithOwnershipService sets the ownership service.
 func WithOwnershipService(svc *ownership.Service) APIHandlerOption {
 	return func(h *APIHandler) {
 		h.ownershipService = svc
 	}
 }
 
-// WithTransferService sets the transfer service.
 func WithTransferService(svc *transfer.Service) APIHandlerOption {
 	return func(h *APIHandler) {
 		h.transferService = svc
 	}
 }
 
-// NewAPIHandler creates a new APIHandler with the provided options.
-// For production use, prefer NewAPIHandlerStrict which validates all required services.
+func WithPool(p *pgxpool.Pool) APIHandlerOption {
+	return func(h *APIHandler) {
+		h.pool = p
+	}
+}
+
 func NewAPIHandler(opts ...APIHandlerOption) *APIHandler {
 	h := &APIHandler{}
 	for _, opt := range opts {
@@ -88,15 +83,12 @@ func NewAPIHandler(opts ...APIHandlerOption) *APIHandler {
 	return h
 }
 
-// NewAPIHandlerStrict creates a new APIHandler with validation that all required services are configured.
-// Returns an error if any required service is missing. Use this in production to fail fast at startup.
 func NewAPIHandlerStrict(opts ...APIHandlerOption) (*APIHandler, error) {
 	h := &APIHandler{}
 	for _, opt := range opts {
 		opt(h)
 	}
 
-	// Validate all required services are configured.
 	var missing []string
 	if h.fundService == nil {
 		missing = append(missing, "fund service")
@@ -115,7 +107,6 @@ func NewAPIHandlerStrict(opts ...APIHandlerOption) (*APIHandler, error) {
 	return h, nil
 }
 
-// ListFunds lists all funds.
 func (h *APIHandler) ListFunds(ctx context.Context, request ListFundsRequestObject) (ListFundsResponseObject, error) {
 	if h.fundService == nil {
 		return ListFunds500JSONResponse{
@@ -127,7 +118,6 @@ func (h *APIHandler) ListFunds(ctx context.Context, request ListFundsRequestObje
 		}, nil
 	}
 
-	// Build pagination params.
 	params := fund.ListParams{}
 	if request.Params.Limit != nil {
 		params.Limit = *request.Params.Limit
@@ -166,7 +156,6 @@ func (h *APIHandler) ListFunds(ctx context.Context, request ListFundsRequestObje
 	}), nil
 }
 
-// CreateFund creates a new fund with initial ownership in a single atomic transaction.
 func (h *APIHandler) CreateFund(ctx context.Context, request CreateFundRequestObject) (CreateFundResponseObject, error) {
 	if h.fundService == nil {
 		return CreateFund500JSONResponse{
@@ -188,7 +177,6 @@ func (h *APIHandler) CreateFund(ctx context.Context, request CreateFundRequestOb
 		}, nil
 	}
 
-	// CreateFundWithInitialOwner creates both fund and initial ownership atomically.
 	f, err := h.fundService.CreateFundWithInitialOwner(
 		ctx,
 		request.Body.Name,
@@ -232,7 +220,6 @@ func (h *APIHandler) CreateFund(ctx context.Context, request CreateFundRequestOb
 	}), nil
 }
 
-// GetFund gets a fund by ID.
 func (h *APIHandler) GetFund(ctx context.Context, request GetFundRequestObject) (GetFundResponseObject, error) {
 	if h.fundService == nil {
 		return GetFund500JSONResponse{
@@ -273,7 +260,6 @@ func (h *APIHandler) GetFund(ctx context.Context, request GetFundRequestObject) 
 	}), nil
 }
 
-// GetCapTable gets the cap table for a fund.
 func (h *APIHandler) GetCapTable(ctx context.Context, request GetCapTableRequestObject) (GetCapTableResponseObject, error) {
 	if h.ownershipService == nil {
 		return GetCapTable500JSONResponse{
@@ -285,7 +271,6 @@ func (h *APIHandler) GetCapTable(ctx context.Context, request GetCapTableRequest
 		}, nil
 	}
 
-	// Verify fund exists and get total units for percentage calculation (single DB call).
 	var fundTotalUnits int
 	if h.fundService != nil {
 		f, err := h.fundService.GetFund(ctx, request.FundId)
@@ -311,7 +296,6 @@ func (h *APIHandler) GetCapTable(ctx context.Context, request GetCapTableRequest
 		fundTotalUnits = f.TotalUnits
 	}
 
-	// Build pagination params.
 	params := ownership.ListParams{}
 	if request.Params.Limit != nil {
 		params.Limit = *request.Params.Limit
@@ -355,7 +339,6 @@ func (h *APIHandler) GetCapTable(ctx context.Context, request GetCapTableRequest
 	}), nil
 }
 
-// ListTransfers lists transfers for a fund.
 func (h *APIHandler) ListTransfers(ctx context.Context, request ListTransfersRequestObject) (ListTransfersResponseObject, error) {
 	if h.transferService == nil {
 		return ListTransfers500JSONResponse{
@@ -367,7 +350,6 @@ func (h *APIHandler) ListTransfers(ctx context.Context, request ListTransfersReq
 		}, nil
 	}
 
-	// Verify fund exists.
 	if h.fundService != nil {
 		_, err := h.fundService.GetFund(ctx, request.FundId)
 		if err != nil {
@@ -391,7 +373,6 @@ func (h *APIHandler) ListTransfers(ctx context.Context, request ListTransfersReq
 		}
 	}
 
-	// Build pagination params.
 	params := transfer.ListParams{}
 	if request.Params.Limit != nil {
 		params.Limit = *request.Params.Limit
@@ -433,7 +414,6 @@ func (h *APIHandler) ListTransfers(ctx context.Context, request ListTransfersReq
 	}), nil
 }
 
-// CreateTransfer creates a new transfer.
 func (h *APIHandler) CreateTransfer(ctx context.Context, request CreateTransferRequestObject) (CreateTransferResponseObject, error) {
 	if h.transferService == nil {
 		return CreateTransfer500JSONResponse{
@@ -455,7 +435,6 @@ func (h *APIHandler) CreateTransfer(ctx context.Context, request CreateTransferR
 		}, nil
 	}
 
-	// Verify fund exists.
 	if h.fundService != nil {
 		_, err := h.fundService.GetFund(ctx, request.FundId)
 		if err != nil {
@@ -479,7 +458,6 @@ func (h *APIHandler) CreateTransfer(ctx context.Context, request CreateTransferR
 		}
 	}
 
-	// Build transfer request.
 	req := transfer.Request{
 		FundID:    request.FundId,
 		FromOwner: request.Body.FromOwner,
@@ -493,7 +471,6 @@ func (h *APIHandler) CreateTransfer(ctx context.Context, request CreateTransferR
 
 	t, err := h.transferService.ExecuteTransfer(ctx, req)
 	if err != nil {
-		// Map domain errors to HTTP responses.
 		switch {
 		case errors.Is(err, transfer.ErrInvalidOwner):
 			return CreateTransfer400JSONResponse{
@@ -515,24 +492,35 @@ func (h *APIHandler) CreateTransfer(ctx context.Context, request CreateTransferR
 			return CreateTransfer400JSONResponse{
 				TransferBadRequestJSONResponse: TransferBadRequestJSONResponse{
 					Code:    INVALIDREQUEST,
-					Message: err.Error(),
-					Details: errorDetails(ctx, nil),
+					Message: fmt.Sprintf("Cannot transfer units to yourself. Both fromOwner and toOwner are '%s'.", request.Body.FromOwner),
+					Details: errorDetails(ctx, map[string]interface{}{
+						"fromOwner": request.Body.FromOwner,
+						"toOwner":   request.Body.ToOwner,
+					}),
 				},
 			}, nil
 		case errors.Is(err, transfer.ErrOwnerNotFound):
 			return CreateTransfer404JSONResponse{
 				TransferNotFoundJSONResponse: TransferNotFoundJSONResponse{
 					Code:    OWNERNOTFOUND,
-					Message: err.Error(),
-					Details: errorDetails(ctx, nil),
+					Message: fmt.Sprintf("Owner '%s' does not own any units in this fund. Check the cap table to see current owners.", request.Body.FromOwner),
+					Details: errorDetails(ctx, map[string]interface{}{
+						"ownerName": request.Body.FromOwner,
+						"fundId":    request.FundId.String(),
+						"hint":      "The fromOwner must be an existing owner in the fund's cap table",
+					}),
 				},
 			}, nil
 		case errors.Is(err, transfer.ErrInsufficientUnits):
 			return CreateTransfer400JSONResponse{
 				TransferBadRequestJSONResponse: TransferBadRequestJSONResponse{
 					Code:    INSUFFICIENTUNITS,
-					Message: err.Error(),
-					Details: errorDetails(ctx, nil),
+					Message: fmt.Sprintf("Owner '%s' does not have enough units for this transfer. They need at least %d units.", request.Body.FromOwner, request.Body.Units),
+					Details: errorDetails(ctx, map[string]interface{}{
+						"ownerName":      request.Body.FromOwner,
+						"requestedUnits": request.Body.Units,
+						"hint":           "Check the cap table to see how many units this owner currently holds",
+					}),
 				},
 			}, nil
 		case errors.Is(err, transfer.ErrDuplicateIdempotencyKey):
@@ -570,5 +558,75 @@ func (h *APIHandler) CreateTransfer(ctx context.Context, request CreateTransferR
 	}), nil
 }
 
-// Ensure APIHandler implements StrictServerInterface.
+func (h *APIHandler) ResetDatabase(ctx context.Context, _ ResetDatabaseRequestObject) (ResetDatabaseResponseObject, error) {
+	if h.pool == nil {
+		return ResetDatabase500JSONResponse{
+			InternalErrorJSONResponse: InternalErrorJSONResponse{
+				Code:    INTERNALERROR,
+				Message: "database pool not configured",
+				Details: errorDetails(ctx, nil),
+			},
+		}, nil
+	}
+
+
+	var deletedTransfers, deletedOwnership, deletedFunds int
+
+	result, err := h.pool.Exec(ctx, "DELETE FROM transfers")
+	if err != nil {
+		logError(ctx, "failed to delete transfers", err)
+		return ResetDatabase500JSONResponse{
+			InternalErrorJSONResponse: InternalErrorJSONResponse{
+				Code:    INTERNALERROR,
+				Message: "failed to reset database",
+				Details: errorDetails(ctx, nil),
+			},
+		}, nil
+	}
+	deletedTransfers = int(result.RowsAffected())
+
+	result, err = h.pool.Exec(ctx, "DELETE FROM cap_table_entries")
+	if err != nil {
+		logError(ctx, "failed to delete ownership entries", err)
+		return ResetDatabase500JSONResponse{
+			InternalErrorJSONResponse: InternalErrorJSONResponse{
+				Code:    INTERNALERROR,
+				Message: "failed to reset database",
+				Details: errorDetails(ctx, nil),
+			},
+		}, nil
+	}
+	deletedOwnership = int(result.RowsAffected())
+
+	result, err = h.pool.Exec(ctx, "DELETE FROM funds")
+	if err != nil {
+		logError(ctx, "failed to delete funds", err)
+		return ResetDatabase500JSONResponse{
+			InternalErrorJSONResponse: InternalErrorJSONResponse{
+				Code:    INTERNALERROR,
+				Message: "failed to reset database",
+				Details: errorDetails(ctx, nil),
+			},
+		}, nil
+	}
+	deletedFunds = int(result.RowsAffected())
+
+	slog.InfoContext(ctx, "database reset completed",
+		slog.Int("deletedFunds", deletedFunds),
+		slog.Int("deletedTransfers", deletedTransfers),
+		slog.Int("deletedOwnership", deletedOwnership),
+	)
+
+	return ResetDatabase200JSONResponse{
+		Message:          ptr("Database reset successfully"),
+		DeletedFunds:     ptr(deletedFunds),
+		DeletedTransfers: ptr(deletedTransfers),
+		DeletedOwnership: ptr(deletedOwnership),
+	}, nil
+}
+
+func ptr[T any](v T) *T {
+	return &v
+}
+
 var _ StrictServerInterface = (*APIHandler)(nil)

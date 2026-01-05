@@ -32,22 +32,16 @@ export function TransferForm({ onSubmit, isLoading, error }: TransferFormProps) 
   };
 
   return (
-    <form
-      onSubmit={handleSubmit(handleFormSubmit)}
-      className="rounded-lg border border-gray-200 bg-white p-6 shadow"
-    >
-      <h3 className="text-lg font-semibold text-gray-900">Transfer Units</h3>
-      <p className="mt-1 text-sm text-gray-600">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="card p-6">
+      <h3 className="text-lg font-semibold text-white">Transfer Units</h3>
+      <p className="mt-1 text-sm text-slate-400">
         Move ownership units from one party to another.
       </p>
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">
-        {/* From Owner field. */}
+        {/* From Owner field */}
         <div>
-          <label
-            htmlFor="from-owner"
-            className="block text-sm font-medium text-gray-700"
-          >
+          <label htmlFor="from-owner" className="label">
             From Owner
           </label>
           <input
@@ -56,28 +50,19 @@ export function TransferForm({ onSubmit, isLoading, error }: TransferFormProps) 
             id="from-owner"
             aria-invalid={errors.fromOwner ? 'true' : 'false'}
             aria-describedby={errors.fromOwner ? 'from-owner-error' : undefined}
-            className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus-visible-ring text-gray-900 placeholder:text-gray-400 ${
-              errors.fromOwner ? 'border-error-500' : 'border-gray-300'
-            }`}
+            className={`input ${errors.fromOwner ? 'input-error' : ''}`}
             placeholder="Founder LLC"
           />
           {errors.fromOwner && (
-            <p
-              id="from-owner-error"
-              role="alert"
-              className="mt-1 text-sm text-error-500"
-            >
+            <p id="from-owner-error" role="alert" className="mt-1.5 text-sm text-red-400">
               {errors.fromOwner.message}
             </p>
           )}
         </div>
 
-        {/* To Owner field. */}
+        {/* To Owner field */}
         <div>
-          <label
-            htmlFor="to-owner"
-            className="block text-sm font-medium text-gray-700"
-          >
+          <label htmlFor="to-owner" className="label">
             To Owner
           </label>
           <input
@@ -86,28 +71,19 @@ export function TransferForm({ onSubmit, isLoading, error }: TransferFormProps) 
             id="to-owner"
             aria-invalid={errors.toOwner ? 'true' : 'false'}
             aria-describedby={errors.toOwner ? 'to-owner-error' : undefined}
-            className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus-visible-ring text-gray-900 placeholder:text-gray-400 ${
-              errors.toOwner ? 'border-error-500' : 'border-gray-300'
-            }`}
+            className={`input ${errors.toOwner ? 'input-error' : ''}`}
             placeholder="Investor A"
           />
           {errors.toOwner && (
-            <p
-              id="to-owner-error"
-              role="alert"
-              className="mt-1 text-sm text-error-500"
-            >
+            <p id="to-owner-error" role="alert" className="mt-1.5 text-sm text-red-400">
               {errors.toOwner.message}
             </p>
           )}
         </div>
 
-        {/* Units field. */}
+        {/* Units field */}
         <div>
-          <label
-            htmlFor="transfer-units"
-            className="block text-sm font-medium text-gray-700"
-          >
+          <label htmlFor="transfer-units" className="label">
             Units
           </label>
           <input
@@ -117,39 +93,29 @@ export function TransferForm({ onSubmit, isLoading, error }: TransferFormProps) 
             min={1}
             aria-invalid={errors.units ? 'true' : 'false'}
             aria-describedby={errors.units ? 'transfer-units-error' : undefined}
-            className={`mt-1 block w-full rounded-md border px-3 py-2 shadow-sm focus-visible-ring text-gray-900 placeholder:text-gray-400 ${
-              errors.units ? 'border-error-500' : 'border-gray-300'
-            }`}
+            className={`input ${errors.units ? 'input-error' : ''}`}
             placeholder="100000"
           />
           {errors.units && (
-            <p
-              id="transfer-units-error"
-              role="alert"
-              className="mt-1 text-sm text-error-500"
-            >
+            <p id="transfer-units-error" role="alert" className="mt-1.5 text-sm text-red-400">
               {errors.units.message}
             </p>
           )}
         </div>
       </div>
 
-      {/* API error. */}
+      {/* API error */}
       {error != null && (
         <div className="mt-4">
           <ApiErrorAlert error={error} fallbackMessage="Failed to execute transfer" />
         </div>
       )}
 
-      {/* Submit button. */}
-      <div className="mt-4">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="inline-flex items-center rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus-visible-ring disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+      {/* Submit button */}
+      <div className="mt-6">
+        <button type="submit" disabled={isLoading} className="btn-primary">
           {isLoading && <LoadingSpinner size="sm" className="mr-2" />}
-          Execute Transfer
+          Save
         </button>
       </div>
     </form>

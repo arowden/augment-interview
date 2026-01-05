@@ -66,13 +66,11 @@ func TestListParams_Normalize_DoesNotMutateOriginal(t *testing.T) {
 	original := ListParams{Limit: -1, Offset: -5}
 	_ = original.Normalize()
 
-	// Original should be unchanged
 	assert.Equal(t, -1, original.Limit)
 	assert.Equal(t, -5, original.Offset)
 }
 
 func TestConstants(t *testing.T) {
-	// Verify constants match OpenAPI spec values
 	assert.Equal(t, 1, MinNameLength)
 	assert.Equal(t, 255, MaxNameLength)
 	assert.Equal(t, 1, MinUnits)

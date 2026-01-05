@@ -31,10 +31,8 @@ export function useCreateFund() {
   return useMutation({
     mutationFn: (data: CreateFundRequest) => FundsService.createFund(data),
     onSuccess: (newFund) => {
-      // Invalidate the funds list to refetch.
       queryClient.invalidateQueries({ queryKey: fundKeys.lists() });
 
-      // Optionally set the new fund in the cache.
       queryClient.setQueryData(fundKeys.detail(newFund.id), newFund);
     },
   });

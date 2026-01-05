@@ -10,6 +10,12 @@ variable "environment" {
   default     = "dev"
 }
 
+variable "project_name" {
+  description = "Project name used for resource naming"
+  type        = string
+  default     = "captable"
+}
+
 variable "db_username" {
   description = "Database username"
   type        = string

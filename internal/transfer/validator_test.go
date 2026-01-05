@@ -108,7 +108,7 @@ func TestValidator_ValidateBasic(t *testing.T) {
 			Units:     100,
 		}
 		err := v.ValidateBasic(req)
-		assert.NoError(t, err) // Case-sensitive: "Alice" != "ALICE"
+		assert.NoError(t, err)
 	})
 
 	t.Run("self-transfer check trims whitespace", func(t *testing.T) {

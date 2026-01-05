@@ -5,7 +5,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "augment-fund-${var.environment}"
+    Name = "${var.project_name}-${var.environment}"
   }
 }
 
@@ -14,7 +14,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "augment-fund-${var.environment}-igw"
+    Name = "${var.project_name}-${var.environment}-igw"
   }
 }
 
@@ -27,7 +27,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "augment-fund-${var.environment}-public-${count.index + 1}"
+    Name = "${var.project_name}-${var.environment}-public-${count.index + 1}"
     Type = "public"
   }
 }
@@ -40,7 +40,7 @@ resource "aws_subnet" "private" {
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name = "augment-fund-${var.environment}-private-${count.index + 1}"
+    Name = "${var.project_name}-${var.environment}-private-${count.index + 1}"
     Type = "private"
   }
 }
@@ -55,7 +55,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-public-rt"
+    Name = "${var.project_name}-${var.environment}-public-rt"
   }
 }
 
@@ -70,7 +70,7 @@ resource "aws_route_table" "private" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "augment-fund-${var.environment}-private-rt"
+    Name = "${var.project_name}-${var.environment}-private-rt"
   }
 }
 
@@ -82,7 +82,7 @@ resource "aws_route_table_association" "private" {
 
 # Security Group for ALB
 resource "aws_security_group" "alb" {
-  name        = "augment-fund-${var.environment}-alb-sg"
+  name        = "${var.project_name}-${var.environment}-alb-sg"
   description = "Security group for ALB"
   vpc_id      = aws_vpc.main.id
 
@@ -110,13 +110,13 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-alb-sg"
+    Name = "${var.project_name}-${var.environment}-alb-sg"
   }
 }
 
 # Security Group for ECS Tasks
 resource "aws_security_group" "ecs" {
-  name        = "augment-fund-${var.environment}-ecs-sg"
+  name        = "${var.project_name}-${var.environment}-ecs-sg"
   description = "Security group for ECS tasks"
   vpc_id      = aws_vpc.main.id
 
@@ -136,13 +136,13 @@ resource "aws_security_group" "ecs" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-ecs-sg"
+    Name = "${var.project_name}-${var.environment}-ecs-sg"
   }
 }
 
 # Security Group for RDS
 resource "aws_security_group" "rds" {
-  name        = "augment-fund-${var.environment}-rds-sg"
+  name        = "${var.project_name}-${var.environment}-rds-sg"
   description = "Security group for RDS"
   vpc_id      = aws_vpc.main.id
 
@@ -155,13 +155,13 @@ resource "aws_security_group" "rds" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-rds-sg"
+    Name = "${var.project_name}-${var.environment}-rds-sg"
   }
 }
 
 # Security Group for VPC Endpoints
 resource "aws_security_group" "vpce" {
-  name        = "augment-fund-${var.environment}-vpce-sg"
+  name        = "${var.project_name}-${var.environment}-vpce-sg"
   description = "Security group for VPC endpoints"
   vpc_id      = aws_vpc.main.id
 
@@ -174,7 +174,7 @@ resource "aws_security_group" "vpce" {
   }
 
   tags = {
-    Name = "augment-fund-${var.environment}-vpce-sg"
+    Name = "${var.project_name}-${var.environment}-vpce-sg"
   }
 }
 
@@ -188,7 +188,7 @@ resource "aws_vpc_endpoint" "ecr_dkr" {
   private_dns_enabled = true
 
   tags = {
-    Name = "augment-fund-${var.environment}-ecr-dkr-vpce"
+    Name = "${var.project_name}-${var.environment}-ecr-dkr-vpce"
   }
 }
 
@@ -202,7 +202,7 @@ resource "aws_vpc_endpoint" "ecr_api" {
   private_dns_enabled = true
 
   tags = {
-    Name = "augment-fund-${var.environment}-ecr-api-vpce"
+    Name = "${var.project_name}-${var.environment}-ecr-api-vpce"
   }
 }
 
@@ -214,7 +214,7 @@ resource "aws_vpc_endpoint" "s3" {
   route_table_ids   = [aws_route_table.private.id]
 
   tags = {
-    Name = "augment-fund-${var.environment}-s3-vpce"
+    Name = "${var.project_name}-${var.environment}-s3-vpce"
   }
 }
 
@@ -228,22 +228,36 @@ resource "aws_vpc_endpoint" "logs" {
   private_dns_enabled = true
 
   tags = {
-    Name = "augment-fund-${var.environment}-logs-vpce"
+    Name = "${var.project_name}-${var.environment}-logs-vpce"
+  }
+}
+
+# VPC Endpoint for Secrets Manager
+resource "aws_vpc_endpoint" "secretsmanager" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.vpce.id]
+  private_dns_enabled = true
+
+  tags = {
+    Name = "${var.project_name}-${var.environment}-secretsmanager-vpce"
   }
 }
 
 # VPC Flow Logs
 resource "aws_cloudwatch_log_group" "flow_logs" {
-  name              = "/vpc/augment-fund-${var.environment}/flow-logs"
+  name              = "/vpc/${var.project_name}-${var.environment}/flow-logs"
   retention_in_days = 14
 
   tags = {
-    Name = "augment-fund-${var.environment}-flow-logs"
+    Name = "${var.project_name}-${var.environment}-flow-logs"
   }
 }
 
 resource "aws_iam_role" "flow_logs" {
-  name = "augment-fund-${var.environment}-flow-logs-role"
+  name = "${var.project_name}-${var.environment}-flow-logs-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -258,7 +272,7 @@ resource "aws_iam_role" "flow_logs" {
 }
 
 resource "aws_iam_role_policy" "flow_logs" {
-  name = "augment-fund-${var.environment}-flow-logs-policy"
+  name = "${var.project_name}-${var.environment}-flow-logs-policy"
   role = aws_iam_role.flow_logs.id
 
   policy = jsonencode({
@@ -285,6 +299,6 @@ resource "aws_flow_log" "main" {
   iam_role_arn         = aws_iam_role.flow_logs.arn
 
   tags = {
-    Name = "augment-fund-${var.environment}-flow-log"
+    Name = "${var.project_name}-${var.environment}-flow-log"
   }
 }

@@ -36,7 +36,6 @@ describe('FundList', () => {
       />
     );
 
-    // Check for skeleton elements (they have the skeleton class).
     const skeletons = document.querySelectorAll('.skeleton');
     expect(skeletons.length).toBeGreaterThan(0);
   });
@@ -109,11 +108,9 @@ describe('FundList', () => {
     const fundCards = screen.getAllByRole('button');
     expect(fundCards.length).toBe(2);
 
-    // Tab to first card.
     await user.tab();
     expect(fundCards[0]).toHaveFocus();
 
-    // Tab to second card.
     await user.tab();
     expect(fundCards[1]).toHaveFocus();
   });

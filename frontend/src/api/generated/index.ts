@@ -20,6 +20,7 @@ export type { Offset } from './models/Offset';
 export type { Transfer } from './models/Transfer';
 export type { TransferList } from './models/TransferList';
 
+export { AdminService } from './services/AdminService';
 export { CapTableService } from './services/CapTableService';
 export { FundsService } from './services/FundsService';
 export { TransfersService } from './services/TransfersService';

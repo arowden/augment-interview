@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockRepository implements Repository for testing.
 type mockRepository struct {
 	createFunc   func(ctx context.Context, fund *Fund) error
 	createTxFunc func(ctx context.Context, tx pgx.Tx, fund *Fund) error
@@ -48,12 +47,11 @@ func (m *mockRepository) List(ctx context.Context, params ListParams) (*ListResu
 	return &ListResult{Items: []*Fund{}}, nil
 }
 
-// mockOwnershipRepository implements ownership.Repository for testing.
 type mockOwnershipRepository struct {
 	createTxFunc func(ctx context.Context, tx pgx.Tx, entry *ownership.Entry) error
 }
 
-func (m *mockOwnershipRepository) Create(ctx context.Context, entry *ownership.Entry) error {
+func (m *mockOwnershipRepository) Create(_ context.Context, _ *ownership.Entry) error {
 	return nil
 }
 
@@ -64,11 +62,11 @@ func (m *mockOwnershipRepository) CreateTx(ctx context.Context, tx pgx.Tx, entry
 	return nil
 }
 
-func (m *mockOwnershipRepository) FindByFundID(ctx context.Context, fundID uuid.UUID, params ownership.ListParams) (*ownership.CapTableView, error) {
+func (m *mockOwnershipRepository) FindByFundID(_ context.Context, _ uuid.UUID, _ ownership.ListParams) (*ownership.CapTableView, error) {
 	return nil, nil
 }
 
-func (m *mockOwnershipRepository) FindByFundAndOwner(ctx context.Context, fundID uuid.UUID, ownerName string) (*ownership.Entry, error) {
+func (m *mockOwnershipRepository) FindByFundAndOwner(_ context.Context, _ uuid.UUID, _ string) (*ownership.Entry, error) {
 	return nil, nil
 }
 
@@ -115,64 +113,6 @@ func TestNewService(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, svc)
 		assert.Equal(t, ownershipRepo, svc.ownershipRepo)
-	})
-}
-
-func TestService_CreateFund(t *testing.T) {
-	t.Run("creates fund with valid inputs", func(t *testing.T) {
-		var createdFund *Fund
-		repo := &mockRepository{
-			createFunc: func(ctx context.Context, fund *Fund) error {
-				createdFund = fund
-				return nil
-			},
-		}
-
-		svc, err := NewService(repo)
-		require.NoError(t, err)
-
-		fund, err := svc.CreateFund(context.Background(), "Test Fund", 1000)
-		require.NoError(t, err)
-		assert.NotNil(t, fund)
-		assert.Equal(t, "Test Fund", fund.Name)
-		assert.Equal(t, 1000, fund.TotalUnits)
-		assert.Equal(t, createdFund, fund)
-	})
-
-	t.Run("returns validation error for invalid name", func(t *testing.T) {
-		repo := &mockRepository{}
-		svc, err := NewService(repo)
-		require.NoError(t, err)
-
-		fund, err := svc.CreateFund(context.Background(), "", 1000)
-		assert.Nil(t, fund)
-		assert.ErrorIs(t, err, ErrInvalidFund)
-	})
-
-	t.Run("returns validation error for invalid units", func(t *testing.T) {
-		repo := &mockRepository{}
-		svc, err := NewService(repo)
-		require.NoError(t, err)
-
-		fund, err := svc.CreateFund(context.Background(), "Test Fund", 0)
-		assert.Nil(t, fund)
-		assert.ErrorIs(t, err, ErrInvalidFund)
-	})
-
-	t.Run("propagates repository error", func(t *testing.T) {
-		repoErr := errors.New("database error")
-		repo := &mockRepository{
-			createFunc: func(ctx context.Context, fund *Fund) error {
-				return repoErr
-			},
-		}
-
-		svc, err := NewService(repo)
-		require.NoError(t, err)
-
-		fund, err := svc.CreateFund(context.Background(), "Test Fund", 1000)
-		assert.Nil(t, fund)
-		assert.Equal(t, repoErr, err)
 	})
 }
 
@@ -272,15 +212,13 @@ func TestService_CreateFundWithInitialOwner(t *testing.T) {
 
 	t.Run("returns error when ownership repo is nil", func(t *testing.T) {
 		repo := &mockRepository{}
-		// No ownership repository configured
 
 		svc, err := NewService(repo)
 		require.NoError(t, err)
 
 		fund, err := svc.CreateFundWithInitialOwner(context.Background(), "Test Fund", 1000, "Owner")
 		assert.Nil(t, fund)
-		// Should fail at validation before checking pool
-		// Actually it validates fund first, then checks pool and ownership repo
+		assert.ErrorIs(t, err, ErrPoolRequired)
 	})
 
 	t.Run("returns validation error for invalid fund name", func(t *testing.T) {

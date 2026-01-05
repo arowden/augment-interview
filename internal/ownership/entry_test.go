@@ -70,7 +70,6 @@ func TestNewCapTableEntry(t *testing.T) {
 	})
 
 	t.Run("unicode owner name counts runes not bytes", func(t *testing.T) {
-		// 255 CJK characters (each is 3 bytes in UTF-8, so 765 bytes total).
 		unicodeName := strings.Repeat("基", validation.MaxNameLength)
 		entry, err := NewCapTableEntry(fundID, unicodeName, 1000)
 		require.NoError(t, err)
@@ -78,7 +77,6 @@ func TestNewCapTableEntry(t *testing.T) {
 	})
 
 	t.Run("unicode owner name exceeding max runes returns error", func(t *testing.T) {
-		// 256 CJK characters should fail.
 		unicodeName := strings.Repeat("基", validation.MaxNameLength+1)
 		entry, err := NewCapTableEntry(fundID, unicodeName, 1000)
 		assert.Nil(t, entry)

@@ -9,7 +9,6 @@ import (
 )
 
 func TestLoad(t *testing.T) {
-	// Save original env and restore after test
 	originalEnv := map[string]string{
 		"DB_HOST":     os.Getenv("DB_HOST"),
 		"DB_PORT":     os.Getenv("DB_PORT"),
@@ -68,7 +67,6 @@ func TestLoad(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, cfg)
 
-		// Check defaults
 		assert.Equal(t, 5432, cfg.Database.Port)
 		assert.Equal(t, "require", cfg.Database.SSLMode)
 		assert.Equal(t, "0.0.0.0", cfg.Server.Host)
@@ -122,7 +120,6 @@ func TestLoad(t *testing.T) {
 
 func TestServerDefaults(t *testing.T) {
 	s := Server{}
-	// Verify zero values before envconfig processing
 	assert.Equal(t, "", s.Host)
 	assert.Equal(t, 0, s.Port)
 }

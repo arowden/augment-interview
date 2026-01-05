@@ -76,7 +76,6 @@ func TestNewFund(t *testing.T) {
 	})
 
 	t.Run("unicode name counts runes not bytes", func(t *testing.T) {
-		// 255 CJK characters (each is 3 bytes in UTF-8, so 765 bytes total)
 		unicodeName := strings.Repeat("基", validation.MaxNameLength)
 		fund, err := NewFund(unicodeName, 1000)
 		require.NoError(t, err)
@@ -84,7 +83,6 @@ func TestNewFund(t *testing.T) {
 	})
 
 	t.Run("unicode name exceeding max runes returns error", func(t *testing.T) {
-		// 256 CJK characters should fail
 		unicodeName := strings.Repeat("基", validation.MaxNameLength+1)
 		fund, err := NewFund(unicodeName, 1000)
 		assert.Nil(t, fund)

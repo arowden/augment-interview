@@ -9,8 +9,6 @@ import (
 
 const meterName = "github.com/arowden/augment-fund/internal/postgres"
 
-// RegisterMetrics registers observable pool metrics with the OTel meter.
-// The OTel collector will invoke the callbacks when scraping.
 func RegisterMetrics(pool *Pool) error {
 	meter := otel.Meter(meterName)
 

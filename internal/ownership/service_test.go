@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockRepository implements Repository for testing.
 type mockRepository struct {
 	createFunc                      func(ctx context.Context, entry *Entry) error
 	createTxFunc                    func(ctx context.Context, tx pgx.Tx, entry *Entry) error

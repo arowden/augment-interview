@@ -43,3 +43,18 @@ frontend/build/
 # Uncomment if you prefer to regenerate rather than commit generated code
 # frontend/src/api/generated/
 .playwright-mcp/
+
+# Terraform
+deploy/terraform/.terraform/
+deploy/terraform/terraform.tfstate
+deploy/terraform/terraform.tfstate.backup
+deploy/terraform/terraform.tfvars
+*.tfstate
+*.tfstate.*
+
+# Claude
+.claude/
+claudedocs/
+
+# SBOM
+sbom.json

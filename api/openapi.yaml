@@ -300,6 +300,41 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /reset:
+    post:
+      operationId: resetDatabase
+      summary: Reset all data
+      description: |
+        Deletes all funds, cap table entries, and transfers from the database.
+        This is a destructive operation intended for development/testing purposes only.
+      tags:
+        - Admin
+      responses:
+        '200':
+          description: Database reset successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "Database reset successfully"
+                  deletedFunds:
+                    type: integer
+                    minimum: 0
+                    example: 5
+                  deletedTransfers:
+                    type: integer
+                    minimum: 0
+                    example: 12
+                  deletedOwnership:
+                    type: integer
+                    minimum: 0
+                    example: 8
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   parameters:
     FundId:

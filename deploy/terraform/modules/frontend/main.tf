@@ -4,7 +4,7 @@ resource "random_id" "bucket_suffix" {
 }
 
 locals {
-  bucket_name = var.bucket_name_suffix != "" ? "augment-fund-${var.environment}-frontend-${var.bucket_name_suffix}" : "augment-fund-${var.environment}-frontend-${random_id.bucket_suffix.hex}"
+  bucket_name = var.bucket_name_suffix != "" ? "${var.project_name}-${var.environment}-frontend-${var.bucket_name_suffix}" : "${var.project_name}-${var.environment}-frontend-${random_id.bucket_suffix.hex}"
 }
 
 # S3 Bucket for Frontend
@@ -12,7 +12,7 @@ resource "aws_s3_bucket" "frontend" {
   bucket = local.bucket_name
 
   tags = {
-    Name = "augment-fund-${var.environment}-frontend"
+    Name = "${var.project_name}-${var.environment}-frontend"
   }
 }
 

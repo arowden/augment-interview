@@ -1,3 +1,4 @@
+
 package fund
 
 import (
@@ -34,7 +35,6 @@ func TestStore(t *testing.T) {
 		err = store.Create(ctx, fund)
 		require.NoError(t, err)
 
-		// Verify it was persisted
 		found, err := store.FindByID(ctx, fund.ID)
 		require.NoError(t, err)
 		assert.Equal(t, fund.ID, found.ID)
@@ -72,11 +72,9 @@ func TestStore(t *testing.T) {
 		err = store.CreateTx(ctx, tx, fund)
 		require.NoError(t, err)
 
-		// Rollback - fund should not be persisted
 		err = tx.Rollback(ctx)
 		require.NoError(t, err)
 
-		// Verify not found
 		_, err = store.FindByID(ctx, fund.ID)
 		assert.True(t, errors.Is(err, ErrNotFound))
 	})
@@ -95,7 +93,6 @@ func TestStore(t *testing.T) {
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
-		// Verify found
 		found, err := store.FindByID(ctx, fund.ID)
 		require.NoError(t, err)
 		assert.Equal(t, fund.ID, found.ID)
@@ -124,8 +121,6 @@ func TestStore(t *testing.T) {
 	t.Run("List returns all funds with correct total", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create funds with delays to ensure distinct timestamps.
-		// NewFund sets CreatedAt to time.Now(), so we must sleep before each call.
 		fund1, _ := NewFund("First Fund", 100)
 		require.NoError(t, store.Create(ctx, fund1))
 
@@ -142,7 +137,6 @@ func TestStore(t *testing.T) {
 		require.Len(t, result.Items, 3)
 		assert.Equal(t, 3, result.Total)
 
-		// Verify all funds are present (order is newest first)
 		ids := make([]uuid.UUID, len(result.Items))
 		for i, f := range result.Items {
 			ids[i] = f.ID
@@ -151,7 +145,6 @@ func TestStore(t *testing.T) {
 		assert.Contains(t, ids, fund2.ID)
 		assert.Contains(t, ids, fund3.ID)
 
-		// Verify ordering: most recent first
 		assert.Equal(t, fund3.ID, result.Items[0].ID)
 		assert.Equal(t, fund2.ID, result.Items[1].ID)
 		assert.Equal(t, fund1.ID, result.Items[2].ID)
@@ -160,7 +153,6 @@ func TestStore(t *testing.T) {
 	t.Run("List respects limit parameter", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create 5 funds with distinct timestamps.
 		for i := 1; i <= 5; i++ {
 			fund, _ := NewFund("Fund "+string(rune('A'+i-1)), i*100)
 			require.NoError(t, store.Create(ctx, fund))
@@ -177,7 +169,6 @@ func TestStore(t *testing.T) {
 	t.Run("List respects offset parameter", func(t *testing.T) {
 		tc.Reset(ctx)
 
-		// Create 5 funds with distinct timestamps.
 		funds := make([]*Fund, 5)
 		for i := 0; i < 5; i++ {
 			fund, _ := NewFund("Fund "+string(rune('A'+i)), (i+1)*100)
@@ -186,14 +177,12 @@ func TestStore(t *testing.T) {
 			time.Sleep(20 * time.Millisecond)
 		}
 
-		// Skip first 2 (newest), get next 2.
 		result, err := store.List(ctx, ListParams{Limit: 2, Offset: 2})
 		require.NoError(t, err)
 		assert.Len(t, result.Items, 2)
 		assert.Equal(t, 5, result.Total)
 		assert.Equal(t, 2, result.Offset)
 
-		// Should get funds[2] and funds[1] (3rd and 2nd newest).
 		assert.Equal(t, funds[2].ID, result.Items[0].ID)
 		assert.Equal(t, funds[1].ID, result.Items[1].ID)
 	})
@@ -216,7 +205,6 @@ func TestStore(t *testing.T) {
 		fund, _ := NewFund("Test Fund", 100)
 		require.NoError(t, store.Create(ctx, fund))
 
-		// Negative values should be normalized
 		result, err := store.List(ctx, ListParams{Limit: -1, Offset: -5})
 		require.NoError(t, err)
 		assert.Equal(t, validation.DefaultLimit, result.Limit)

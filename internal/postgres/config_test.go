@@ -35,7 +35,6 @@ func TestConfig_DSN(t *testing.T) {
 				DBName:   "mydb",
 				SSLMode:  "require",
 			},
-			// Note: & is a sub-delim and valid in userinfo per RFC 3986, so not encoded
 			expected: "postgres://admin:p%40ss%3Aword%2Fwith%3Fspecial&chars@localhost:5432/mydb?sslmode=require",
 		},
 		{
@@ -73,7 +72,6 @@ func TestConfig_DSN(t *testing.T) {
 }
 
 func TestConfig_Defaults(t *testing.T) {
-	// Verify that a zero-value config has reasonable zero values
 	cfg := Config{}
 
 	assert.Equal(t, "", cfg.Host)

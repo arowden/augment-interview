@@ -1,25 +1,24 @@
-// Package config provides application configuration via environment variables.
 package config
 
 import (
+	"github.com/arowden/augment-fund/internal/otel"
 	"github.com/arowden/augment-fund/internal/postgres"
 
 	"github.com/kelseyhightower/envconfig"
 )
 
-// Config holds all application configuration.
 type Config struct {
-	Database postgres.Config
-	Server   Server
+	Database  postgres.Config
+	Server    Server
+	Telemetry otel.Config
 }
 
-// Server holds HTTP server configuration.
 type Server struct {
-	Host string `envconfig:"SERVER_HOST" default:"0.0.0.0"`
-	Port int    `envconfig:"SERVER_PORT" default:"8080"`
+	Host        string   `envconfig:"SERVER_HOST" default:"0.0.0.0"`
+	Port        int      `envconfig:"SERVER_PORT" default:"8080"`
+	CORSOrigins []string `envconfig:"CORS_ORIGINS" default:"http://localhost:*,http://127.0.0.1:*"`
 }
 
-// Load reads configuration from environment variables.
 func Load() (*Config, error) {
 	var cfg Config
 
@@ -28,6 +27,10 @@ func Load() (*Config, error) {
 	}
 
 	if err := envconfig.Process("", &cfg.Server); err != nil {
+		return nil, err
+	}
+
+	if err := envconfig.Process("", &cfg.Telemetry); err != nil {
 		return nil, err
 	}
 

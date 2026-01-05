@@ -32,7 +32,6 @@ describe('TransferForm', () => {
       />
     );
 
-    // Fill only partial fields.
     await user.type(screen.getByLabelText(/to owner/i), 'Investor A');
     await user.clear(screen.getByLabelText(/units/i));
     await user.type(screen.getByLabelText(/units/i), '100');
@@ -85,13 +84,11 @@ describe('TransferForm', () => {
     await user.type(screen.getByLabelText(/from owner/i), 'Founder LLC');
     await user.type(screen.getByLabelText(/to owner/i), 'Investor A');
 
-    // Clear units field entirely - results in empty/NaN.
     const unitsInput = screen.getByLabelText(/units/i);
     await user.clear(unitsInput);
 
     await user.click(screen.getByRole('button', { name: /execute transfer/i }));
 
-    // Wait for validation - should show error for invalid number.
     await waitFor(() => {
       const unitsField = screen.getByLabelText(/units/i);
       expect(unitsField).toHaveAttribute('aria-invalid', 'true');

@@ -1,3 +1,4 @@
+
 package transfer
 
 import (
@@ -29,7 +30,6 @@ func TestStore(t *testing.T) {
 	fundStore := fund.NewStore(tc.Pool())
 	ownershipStore := ownership.NewStore(tc.Pool())
 
-	// Helper to create a fund for testing.
 	createTestFund := func(t *testing.T, name string, units int) *fund.Fund {
 		f, err := fund.NewFund(name, units)
 		require.NoError(t, err)
@@ -37,7 +37,6 @@ func TestStore(t *testing.T) {
 		return f
 	}
 
-	// Helper to create an ownership entry.
 	createOwnership := func(t *testing.T, fundID uuid.UUID, owner string, units int) *ownership.Entry {
 		entry, err := ownership.NewCapTableEntry(fundID, owner, units)
 		require.NoError(t, err)
@@ -63,7 +62,6 @@ func TestStore(t *testing.T) {
 		err := store.Create(ctx, transfer)
 		require.NoError(t, err)
 
-		// Verify it was persisted.
 		list, err := store.FindByFundID(ctx, testFund.ID, ListParams{Limit: 10})
 		require.NoError(t, err)
 		require.Len(t, list.Transfers, 1)
@@ -100,7 +98,6 @@ func TestStore(t *testing.T) {
 		err := store.Create(ctx, transfer)
 		require.NoError(t, err)
 
-		// Verify idempotency key was stored.
 		list, err := store.FindByFundID(ctx, testFund.ID, ListParams{})
 		require.NoError(t, err)
 		require.Len(t, list.Transfers, 1)
@@ -129,11 +126,9 @@ func TestStore(t *testing.T) {
 		err = store.CreateTx(ctx, tx, transfer)
 		require.NoError(t, err)
 
-		// Rollback - transfer should not be persisted.
 		err = tx.Rollback(ctx)
 		require.NoError(t, err)
 
-		// Verify not found.
 		list, err := store.FindByFundID(ctx, testFund.ID, ListParams{})
 		require.NoError(t, err)
 		assert.Empty(t, list.Transfers)
@@ -163,7 +158,6 @@ func TestStore(t *testing.T) {
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
-		// Verify found.
 		list, err := store.FindByFundID(ctx, testFund.ID, ListParams{})
 		require.NoError(t, err)
 		require.Len(t, list.Transfers, 1)
@@ -188,8 +182,6 @@ func TestStore(t *testing.T) {
 		createOwnership(t, testFund.ID, "Bob", 300)
 		createOwnership(t, testFund.ID, "Charlie", 200)
 
-		// Create transfers - all will have same timestamp from database NOW().
-		// Order is deterministic by (transferred_at, id).
 		transfers := []*Transfer{
 			{ID: uuid.New(), FundID: testFund.ID, FromOwner: "Alice", ToOwner: "Bob", Units: 100},
 			{ID: uuid.New(), FundID: testFund.ID, FromOwner: "Bob", ToOwner: "Charlie", Units: 50},
@@ -204,7 +196,6 @@ func TestStore(t *testing.T) {
 		require.Len(t, list.Transfers, 3)
 		assert.Equal(t, 3, list.TotalCount)
 
-		// Verify all transfers are returned (order is by timestamp then ID).
 		returnedIDs := make(map[uuid.UUID]bool)
 		for _, tr := range list.Transfers {
 			returnedIDs[tr.ID] = true
@@ -220,7 +211,6 @@ func TestStore(t *testing.T) {
 		createOwnership(t, testFund.ID, "Alice", 500)
 		createOwnership(t, testFund.ID, "Bob", 100)
 
-		// Create 5 transfers. Timestamps are database-generated (NOW()).
 		for i := 0; i < 5; i++ {
 			transfer := &Transfer{
 				ID:        uuid.New(),
@@ -245,7 +235,6 @@ func TestStore(t *testing.T) {
 		createOwnership(t, testFund.ID, "Alice", 500)
 		createOwnership(t, testFund.ID, "Bob", 100)
 
-		// Create 5 transfers. Timestamps are database-generated (NOW()).
 		transfers := make([]*Transfer, 5)
 		for i := 0; i < 5; i++ {
 			transfers[i] = &Transfer{
@@ -258,19 +247,16 @@ func TestStore(t *testing.T) {
 			require.NoError(t, store.Create(ctx, transfers[i]))
 		}
 
-		// Get all to know the actual order.
 		allList, err := store.FindByFundID(ctx, testFund.ID, ListParams{Limit: 10})
 		require.NoError(t, err)
 		require.Len(t, allList.Transfers, 5)
 
-		// Skip first 2, get next 2.
 		list, err := store.FindByFundID(ctx, testFund.ID, ListParams{Limit: 2, Offset: 2})
 		require.NoError(t, err)
 		assert.Len(t, list.Transfers, 2)
 		assert.Equal(t, 5, list.TotalCount)
 		assert.Equal(t, 2, list.Offset)
 
-		// Should get 3rd and 4th entries from the full list.
 		assert.Equal(t, allList.Transfers[2].ID, list.Transfers[0].ID)
 		assert.Equal(t, allList.Transfers[3].ID, list.Transfers[1].ID)
 	})
@@ -313,7 +299,6 @@ func TestStore(t *testing.T) {
 		}
 		require.NoError(t, store.Create(ctx, transfer))
 
-		// Negative values should be normalized.
 		list, err := store.FindByFundID(ctx, testFund.ID, ListParams{Limit: -1, Offset: -5})
 		require.NoError(t, err)
 		assert.Equal(t, validation.DefaultLimit, list.Limit)
@@ -347,7 +332,7 @@ func TestStore(t *testing.T) {
 
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
-		defer tx.Rollback(ctx) //nolint:errcheck
+		defer tx.Rollback(ctx)
 
 		found, err := store.FindByIdempotencyKey(ctx, tx, nonExistentKey)
 		require.NoError(t, err)
@@ -374,7 +359,7 @@ func TestStore(t *testing.T) {
 
 		tx, err := tc.Pool().Begin(ctx)
 		require.NoError(t, err)
-		defer tx.Rollback(ctx) //nolint:errcheck
+		defer tx.Rollback(ctx)
 
 		found, err := store.FindByIdempotencyKey(ctx, tx, idempotencyKey)
 		require.NoError(t, err)
@@ -419,7 +404,6 @@ func TestStore(t *testing.T) {
 		}
 		require.NoError(t, store.Create(ctx, transfer2))
 
-		// Each fund should only see its own transfers.
 		list1, err := store.FindByFundID(ctx, fund1.ID, ListParams{})
 		require.NoError(t, err)
 		require.Len(t, list1.Transfers, 1)
@@ -446,7 +430,6 @@ func TestTransferService(t *testing.T) {
 	ownershipStore := ownership.NewStore(tc.Pool())
 	transferStore := NewStore(tc.Pool())
 
-	// Helper to create a fund for testing.
 	createTestFund := func(t *testing.T, name string, units int) *fund.Fund {
 		f, err := fund.NewFund(name, units)
 		require.NoError(t, err)
@@ -454,7 +437,6 @@ func TestTransferService(t *testing.T) {
 		return f
 	}
 
-	// Helper to create an ownership entry.
 	createOwnership := func(t *testing.T, fundID uuid.UUID, owner string, units int) *ownership.Entry {
 		entry, err := ownership.NewCapTableEntry(fundID, owner, units)
 		require.NoError(t, err)
@@ -488,12 +470,10 @@ func TestTransferService(t *testing.T) {
 		assert.Equal(t, "Bob", transfer.ToOwner)
 		assert.Equal(t, 100, transfer.Units)
 
-		// Verify Alice's units decreased.
 		aliceEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Alice")
 		require.NoError(t, err)
 		assert.Equal(t, 400, aliceEntry.Units)
 
-		// Verify Bob was created with correct units.
 		bobEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Bob")
 		require.NoError(t, err)
 		assert.Equal(t, 100, bobEntry.Units)
@@ -523,12 +503,10 @@ func TestTransferService(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, transfer)
 
-		// Verify Alice's units decreased.
 		aliceEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Alice")
 		require.NoError(t, err)
 		assert.Equal(t, 400, aliceEntry.Units)
 
-		// Verify Bob's units increased.
 		bobEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Bob")
 		require.NoError(t, err)
 		assert.Equal(t, 300, bobEntry.Units)
@@ -578,7 +556,6 @@ func TestTransferService(t *testing.T) {
 		_, err = svc.ExecuteTransfer(ctx, req)
 		assert.ErrorIs(t, err, ErrInsufficientUnits)
 
-		// Verify Alice's units unchanged.
 		aliceEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Alice")
 		require.NoError(t, err)
 		assert.Equal(t, 50, aliceEntry.Units)
@@ -605,25 +582,20 @@ func TestTransferService(t *testing.T) {
 			IdempotencyKey: &idempotencyKey,
 		}
 
-		// First transfer.
 		transfer1, err := svc.ExecuteTransfer(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, transfer1)
 
-		// Second transfer with same idempotency key.
 		transfer2, err := svc.ExecuteTransfer(ctx, req)
 		require.NoError(t, err)
 		require.NotNil(t, transfer2)
 
-		// Should return the same transfer.
 		assert.Equal(t, transfer1.ID, transfer2.ID)
 
-		// Alice should only have lost 100 units total.
 		aliceEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Alice")
 		require.NoError(t, err)
 		assert.Equal(t, 400, aliceEntry.Units)
 
-		// Bob should only have 100 units.
 		bobEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Bob")
 		require.NoError(t, err)
 		assert.Equal(t, 100, bobEntry.Units)
@@ -641,7 +613,6 @@ func TestTransferService(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		// Self-transfer.
 		_, err = svc.ExecuteTransfer(ctx, Request{
 			FundID:    testFund.ID,
 			FromOwner: "Alice",
@@ -650,7 +621,6 @@ func TestTransferService(t *testing.T) {
 		})
 		assert.ErrorIs(t, err, ErrSelfTransfer)
 
-		// Zero units.
 		_, err = svc.ExecuteTransfer(ctx, Request{
 			FundID:    testFund.ID,
 			FromOwner: "Alice",
@@ -659,7 +629,6 @@ func TestTransferService(t *testing.T) {
 		})
 		assert.ErrorIs(t, err, ErrInvalidUnits)
 
-		// Empty owner.
 		_, err = svc.ExecuteTransfer(ctx, Request{
 			FundID:    testFund.ID,
 			FromOwner: "",
@@ -709,10 +678,8 @@ func TestTransferService(t *testing.T) {
 
 		wg.Wait()
 
-		// All 10 transfers should succeed since Alice has 1000 units.
 		assert.Equal(t, numGoroutines, successCount)
 
-		// Verify final balances.
 		aliceEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Alice")
 		require.NoError(t, err)
 		assert.Equal(t, 0, aliceEntry.Units)
@@ -725,7 +692,7 @@ func TestTransferService(t *testing.T) {
 	t.Run("ExecuteTransfer concurrent overdraft protection", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 10000)
-		createOwnership(t, testFund.ID, "Alice", 100) // Only 100 units
+		createOwnership(t, testFund.ID, "Alice", 100)
 
 		svc, err := NewService(
 			WithRepository(transferStore),
@@ -735,7 +702,7 @@ func TestTransferService(t *testing.T) {
 		require.NoError(t, err)
 
 		const numGoroutines = 5
-		const unitsPerTransfer = 50 // Each wants 50, but only 100 available
+		const unitsPerTransfer = 50
 
 		var wg sync.WaitGroup
 		successCount := 0
@@ -762,10 +729,8 @@ func TestTransferService(t *testing.T) {
 
 		wg.Wait()
 
-		// Only 2 transfers should succeed (100 / 50 = 2).
 		assert.Equal(t, 2, successCount)
 
-		// Verify final balances.
 		aliceEntry, err := ownershipStore.FindByFundAndOwner(ctx, testFund.ID, "Alice")
 		require.NoError(t, err)
 		assert.Equal(t, 0, aliceEntry.Units)
@@ -787,7 +752,6 @@ func TestTransferService(t *testing.T) {
 		)
 		require.NoError(t, err)
 
-		// Execute multiple transfers.
 		_, err = svc.ExecuteTransfer(ctx, Request{
 			FundID:    testFund.ID,
 			FromOwner: "Alice",
@@ -804,7 +768,6 @@ func TestTransferService(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// List transfers.
 		list, err := svc.ListTransfers(ctx, testFund.ID, ListParams{})
 		require.NoError(t, err)
 		assert.Len(t, list.Transfers, 2)

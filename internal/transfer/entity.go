@@ -6,7 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// Transfer represents an immutable record of units transferred between owners.
 type Transfer struct {
 	ID             uuid.UUID
 	FundID         uuid.UUID

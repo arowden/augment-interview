@@ -1,3 +1,4 @@
+
 package ownership_test
 
 import (
@@ -29,7 +30,6 @@ func TestStore(t *testing.T) {
 	store := ownership.NewStore(tc.Pool())
 	fundStore := fund.NewStore(tc.Pool())
 
-	// Helper to create a fund for testing.
 	createTestFund := func(t *testing.T, name string, units int) *fund.Fund {
 		f, err := fund.NewFund(name, units)
 		require.NoError(t, err)
@@ -47,7 +47,6 @@ func TestStore(t *testing.T) {
 		err = store.Create(ctx, entry)
 		require.NoError(t, err)
 
-		// Verify it was persisted.
 		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "John Doe")
 		require.NoError(t, err)
 		assert.Equal(t, entry.ID, found.ID)
@@ -90,11 +89,9 @@ func TestStore(t *testing.T) {
 		err = store.CreateTx(ctx, tx, entry)
 		require.NoError(t, err)
 
-		// Rollback - entry should not be persisted.
 		err = tx.Rollback(ctx)
 		require.NoError(t, err)
 
-		// Verify not found.
 		_, err = store.FindByFundAndOwner(ctx, testFund.ID, "Tx Owner")
 		assert.True(t, errors.Is(err, ownership.ErrOwnerNotFound))
 	})
@@ -115,7 +112,6 @@ func TestStore(t *testing.T) {
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
-		// Verify found.
 		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Committed Owner")
 		require.NoError(t, err)
 		assert.Equal(t, entry.ID, found.ID)
@@ -136,7 +132,6 @@ func TestStore(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		// Create entries with different unit amounts.
 		entry1, _ := ownership.NewCapTableEntry(testFund.ID, "Small Owner", 100)
 		require.NoError(t, store.Create(ctx, entry1))
 
@@ -151,7 +146,6 @@ func TestStore(t *testing.T) {
 		require.Len(t, view.Entries, 3)
 		assert.Equal(t, 3, view.TotalCount)
 
-		// Verify ordering: largest units first.
 		assert.Equal(t, "Large Owner", view.Entries[0].OwnerName)
 		assert.Equal(t, 500, view.Entries[0].Units)
 		assert.Equal(t, "Medium Owner", view.Entries[1].OwnerName)
@@ -164,7 +158,6 @@ func TestStore(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		// Create 5 entries.
 		for i := 1; i <= 5; i++ {
 			entry, _ := ownership.NewCapTableEntry(testFund.ID, "Owner "+string(rune('A'+i-1)), i*100)
 			require.NoError(t, store.Create(ctx, entry))
@@ -181,7 +174,6 @@ func TestStore(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1500)
 
-		// Create entries with different units.
 		entries := []struct {
 			name  string
 			units int
@@ -197,14 +189,12 @@ func TestStore(t *testing.T) {
 			require.NoError(t, store.Create(ctx, entry))
 		}
 
-		// Skip first 2 (largest), get next 2.
 		view, err := store.FindByFundID(ctx, testFund.ID, ownership.ListParams{Limit: 2, Offset: 2})
 		require.NoError(t, err)
 		assert.Len(t, view.Entries, 2)
 		assert.Equal(t, 5, view.TotalCount)
 		assert.Equal(t, 2, view.Offset)
 
-		// Should get Owner C (300) and Owner B (200).
 		assert.Equal(t, "Owner C", view.Entries[0].OwnerName)
 		assert.Equal(t, "Owner B", view.Entries[1].OwnerName)
 	})
@@ -263,14 +253,11 @@ func TestStore(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		// Create initial entry.
 		original, _ := ownership.NewCapTableEntry(testFund.ID, "Update Owner", 300)
 		require.NoError(t, store.Create(ctx, original))
 
-		// Wait a bit to ensure different timestamps.
 		time.Sleep(50 * time.Millisecond)
 
-		// Upsert with new units.
 		updated, _ := ownership.NewCapTableEntry(testFund.ID, "Update Owner", 500)
 		err := store.Upsert(ctx, updated)
 		require.NoError(t, err)
@@ -278,26 +265,22 @@ func TestStore(t *testing.T) {
 		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Update Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 500, found.Units)
-		assert.Equal(t, original.ID, found.ID) // Same ID preserved.
+		assert.Equal(t, original.ID, found.ID)
 	})
 
 	t.Run("Upsert preserves acquiredAt on update", func(t *testing.T) {
 		tc.Reset(ctx)
 		testFund := createTestFund(t, "Test Fund", 1000)
 
-		// Create initial entry.
 		original, _ := ownership.NewCapTableEntry(testFund.ID, "Acquired Owner", 200)
 		require.NoError(t, store.Create(ctx, original))
 
-		// Get the original acquired_at.
 		created, err := store.FindByFundAndOwner(ctx, testFund.ID, "Acquired Owner")
 		require.NoError(t, err)
 		originalAcquiredAt := created.AcquiredAt
 
-		// Wait to ensure different timestamp.
 		time.Sleep(50 * time.Millisecond)
 
-		// Upsert with new units.
 		updated, _ := ownership.NewCapTableEntry(testFund.ID, "Acquired Owner", 400)
 		err = store.Upsert(ctx, updated)
 		require.NoError(t, err)
@@ -305,9 +288,7 @@ func TestStore(t *testing.T) {
 		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Acquired Owner")
 		require.NoError(t, err)
 
-		// AcquiredAt should be preserved.
 		assert.Equal(t, originalAcquiredAt.Unix(), found.AcquiredAt.Unix())
-		// UpdatedAt should be different (newer).
 		assert.True(t, found.UpdatedAt.After(originalAcquiredAt))
 	})
 
@@ -331,11 +312,9 @@ func TestStore(t *testing.T) {
 		err = store.UpsertTx(ctx, tx, entry)
 		require.NoError(t, err)
 
-		// Rollback.
 		err = tx.Rollback(ctx)
 		require.NoError(t, err)
 
-		// Should not be found.
 		_, err = store.FindByFundAndOwner(ctx, testFund.ID, "Rollback Owner")
 		assert.True(t, errors.Is(err, ownership.ErrOwnerNotFound))
 	})
@@ -356,7 +335,6 @@ func TestStore(t *testing.T) {
 		err = tx.Commit(ctx)
 		require.NoError(t, err)
 
-		// Should be found.
 		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Commit Owner")
 		require.NoError(t, err)
 		assert.Equal(t, 700, found.Units)
@@ -390,12 +368,10 @@ func TestStore(t *testing.T) {
 		wg.Wait()
 		close(errChan)
 
-		// Check for errors.
 		for err := range errChan {
 			t.Errorf("concurrent upsert error: %v", err)
 		}
 
-		// Verify the entry exists (final value is non-deterministic due to race).
 		found, err := store.FindByFundAndOwner(ctx, testFund.ID, "Concurrent Owner")
 		require.NoError(t, err)
 		assert.Greater(t, found.Units, 0)
@@ -408,7 +384,6 @@ func TestStore(t *testing.T) {
 		entry, _ := ownership.NewCapTableEntry(testFund.ID, "Active Owner", 500)
 		require.NoError(t, store.Create(ctx, entry))
 
-		// Manually soft-delete via SQL.
 		_, err := tc.Pool().Exec(ctx, `UPDATE cap_table_entries SET deleted_at = NOW() WHERE owner_name = $1`, "Active Owner")
 		require.NoError(t, err)
 
@@ -424,7 +399,6 @@ func TestStore(t *testing.T) {
 		entry, _ := ownership.NewCapTableEntry(testFund.ID, "Deleted Owner", 500)
 		require.NoError(t, store.Create(ctx, entry))
 
-		// Manually soft-delete via SQL.
 		_, err := tc.Pool().Exec(ctx, `UPDATE cap_table_entries SET deleted_at = NOW() WHERE owner_name = $1`, "Deleted Owner")
 		require.NoError(t, err)
 

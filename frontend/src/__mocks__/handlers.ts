@@ -2,7 +2,6 @@ import { http, HttpResponse } from 'msw';
 
 import type { Fund, CapTable, Transfer } from '../api/client';
 
-// Mock data.
 export const mockFunds: Fund[] = [
   {
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -64,14 +63,11 @@ export const mockTransfers: Transfer[] = [
   },
 ];
 
-// API handlers.
 export const handlers = [
-  // List funds.
   http.get('/api/funds', () => {
     return HttpResponse.json(mockFunds);
   }),
 
-  // Create fund.
   http.post('/api/funds', async ({ request }) => {
     const body = await request.json() as { name: string; totalUnits: number };
     const newFund: Fund = {
@@ -83,7 +79,6 @@ export const handlers = [
     return HttpResponse.json(newFund, { status: 201 });
   }),
 
-  // Get fund by ID.
   http.get('/api/funds/:fundId', ({ params }) => {
     const fund = mockFunds.find((f) => f.id === params['fundId']);
     if (!fund) {
@@ -95,7 +90,6 @@ export const handlers = [
     return HttpResponse.json(fund);
   }),
 
-  // Get cap table.
   http.get('/api/funds/:fundId/cap-table', ({ params }) => {
     const fund = mockFunds.find((f) => f.id === params['fundId']);
     if (!fund) {
@@ -107,7 +101,6 @@ export const handlers = [
     return HttpResponse.json({ ...mockCapTable, fundId: params['fundId'] });
   }),
 
-  // List transfers.
   http.get('/api/funds/:fundId/transfers', ({ params }) => {
     const fund = mockFunds.find((f) => f.id === params['fundId']);
     if (!fund) {
@@ -121,7 +114,6 @@ export const handlers = [
     );
   }),
 
-  // Create transfer.
   http.post('/api/funds/:fundId/transfers', async ({ params, request }) => {
     const fund = mockFunds.find((f) => f.id === params['fundId']);
     if (!fund) {
@@ -133,7 +125,6 @@ export const handlers = [
 
     const body = await request.json() as { fromOwner: string; toOwner: string; units: number };
 
-    // Check self-transfer.
     if (body.fromOwner === body.toOwner) {
       return HttpResponse.json(
         { code: 'SELF_TRANSFER', message: 'Cannot transfer units to yourself' },
