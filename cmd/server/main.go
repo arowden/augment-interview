@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net"
@@ -24,7 +25,24 @@ import (
 	"github.com/arowden/augment-fund/internal/transfer"
 )
 
+// Version is set at build time via -ldflags.
+var Version = "dev"
+
 func main() {
+	// Parse flags for health check mode.
+	healthCheck := flag.Bool("health-check", false, "Run health check and exit")
+	showVersion := flag.Bool("version", false, "Show version and exit")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Println(Version)
+		os.Exit(0)
+	}
+
+	if *healthCheck {
+		os.Exit(runHealthCheck())
+	}
+
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -33,6 +51,27 @@ func main() {
 		log.Error("fatal error", slog.String("error", err.Error()))
 		os.Exit(1)
 	}
+}
+
+// runHealthCheck performs a health check against the local server.
+// Returns 0 for healthy, 1 for unhealthy.
+func runHealthCheck() int {
+	cfg, err := config.Load()
+	if err != nil {
+		return 1
+	}
+
+	addr := fmt.Sprintf("http://127.0.0.1:%d/healthz", cfg.Server.Port)
+	resp, err := http.Get(addr)
+	if err != nil {
+		return 1
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusOK {
+		return 0
+	}
+	return 1
 }
 
 func run(log *slog.Logger) error {

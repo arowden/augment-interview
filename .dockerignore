@@ -1,0 +1,17 @@
+.git/
+.gitignore
+*_test.go
+testdata/
+test_data/
+.env*
+docker-compose.yml
+Dockerfile
+.dockerignore
+*.md
+!README.md
+bin/
+coverage.out
+coverage.html
+.playwright-mcp/
+frontend/node_modules/
+frontend/dist/

@@ -1,0 +1,16 @@
+service-name: augment-fund-api
+
+integrations:
+  - name: net/http
+    enabled: true
+  - name: database/sql
+    enabled: true
+  - name: github.com/jackc/pgx/v5
+    enabled: true
+  - name: log/slog
+    enabled: true
+
+telemetry:
+  tracer: otel
+  metrics: otel
+  logs: otel
