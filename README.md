@@ -294,6 +294,164 @@ The HTTP handlers are generated from the OpenAPI spec:
 make generate-api
 ```
 
+## AWS Deployment
+
+The `deploy/terraform/` directory contains Terraform modules for deploying to AWS.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                              VPC                                     │
+│  ┌─────────────────────────┐    ┌─────────────────────────────────┐ │
+│  │     Public Subnets      │    │       Private Subnets           │ │
+│  │  ┌───────────────────┐  │    │  ┌───────────┐  ┌───────────┐  │ │
+│  │  │        ALB        │  │    │  │ECS Fargate│  │    RDS    │  │ │
+│  │  │   (HTTP/HTTPS)    │──┼────┼─▶│   Tasks   │──│PostgreSQL │  │ │
+│  │  └───────────────────┘  │    │  └───────────┘  └───────────┘  │ │
+│  └─────────────────────────┘    │        │                        │ │
+│                                  │        ▼                        │ │
+│  ┌─────────────────────────┐    │  ┌───────────┐                  │ │
+│  │   S3 (Frontend SPA)     │    │  │    ECR    │ VPC Endpoints:   │ │
+│  │   Static Website        │    │  │  (Images) │ - ECR API/Docker │ │
+│  └─────────────────────────┘    │  └───────────┘ - S3, CloudWatch │ │
+│                                  └─────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Infrastructure Components
+
+| Component | Description | Cost (est.) |
+|-----------|-------------|-------------|
+| **VPC** | 2 AZ setup with public/private subnets | ~$0 |
+| **VPC Endpoints** | ECR, S3, CloudWatch (no NAT Gateway) | ~$22/mo |
+| **RDS PostgreSQL** | db.t3.micro, 20GB, encrypted, 7-day backups | ~$15/mo |
+| **ECS Fargate** | 2 tasks (0.5 vCPU, 1GB each) | ~$37/mo |
+| **ALB** | Application Load Balancer + data transfer | ~$20/mo |
+| **ECR** | Container registry (storage-based) | ~$1/mo |
+| **S3** | Frontend hosting (storage + requests) | ~$1/mo |
+| **CloudWatch** | Logs, alarms, metrics | ~$1/mo |
+| **Total** | | **~$97/mo** |
+
+### Prerequisites
+
+1. **AWS CLI** configured with credentials
+2. **Terraform** 1.0+
+3. **Docker** for building container images
+4. **(Optional)** Domain name and ACM certificate for HTTPS
+
+### Required AWS Permissions
+
+The deploying IAM user/role needs these permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "vpc:*", "ec2:*", "rds:*", "ecs:*", "ecr:*",
+        "elasticloadbalancing:*", "s3:*", "logs:*",
+        "cloudwatch:*", "secretsmanager:*", "kms:*",
+        "iam:CreateRole", "iam:DeleteRole", "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy", "iam:PutRolePolicy", "iam:GetRole",
+        "iam:PassRole", "iam:CreatePolicy", "iam:DeletePolicy",
+        "acm:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### Deployment Steps
+
+1. **Configure variables**:
+   ```bash
+   cd deploy/terraform
+   cp terraform.tfvars.example terraform.tfvars
+   # Edit terraform.tfvars with your values
+   ```
+
+2. **Initialize Terraform**:
+   ```bash
+   terraform init
+   ```
+
+3. **Review plan**:
+   ```bash
+   terraform plan
+   ```
+
+4. **Deploy infrastructure**:
+   ```bash
+   terraform apply
+   ```
+
+5. **Build and push container image**:
+   ```bash
+   # Get ECR URL from outputs
+   ECR_URL=$(terraform output -raw ecr_repository_url)
+
+   # Login to ECR
+   aws ecr get-login-password --region us-east-1 | \
+     docker login --username AWS --password-stdin $ECR_URL
+
+   # Build and push
+   docker build -t $ECR_URL:latest .
+   docker push $ECR_URL:latest
+   ```
+
+6. **Deploy frontend**:
+   ```bash
+   cd frontend
+   npm run build
+   aws s3 sync dist/ s3://$(terraform output -raw frontend_bucket_name)
+   ```
+
+### HTTPS Setup (Optional)
+
+To enable HTTPS, you need an ACM certificate:
+
+1. **Request certificate** in AWS Console (ACM) for your domain
+2. **Validate** via DNS or email
+3. **Update terraform.tfvars**:
+   ```hcl
+   domain_name = "api.yourdomain.com"
+   ```
+4. **Apply changes**:
+   ```bash
+   terraform apply
+   ```
+5. **Point DNS** to the ALB DNS name (from `terraform output alb_dns_name`)
+
+### Outputs
+
+After deployment, Terraform outputs:
+
+| Output | Description |
+|--------|-------------|
+| `api_url` | API endpoint URL |
+| `alb_dns_name` | ALB DNS name for DNS configuration |
+| `ecr_repository_url` | ECR URL for Docker push |
+| `frontend_website_url` | Frontend S3 website URL |
+| `rds_endpoint` | RDS connection endpoint |
+
+### Destroy
+
+To tear down all resources:
+
+```bash
+terraform destroy
+```
+
+**Note**: RDS has `deletion_protection = true`. Disable it first:
+```bash
+terraform apply -var="enable_deletion_protection=false"
+terraform destroy
+```
+
 ## License
 
 MIT
