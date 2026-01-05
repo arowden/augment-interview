@@ -1,229 +1,257 @@
-# Augment Fund Cap Table System - Project Index
+# Augment Fund Cap Table - Project Index
 
-## Overview
+> **Quick Reference Guide** | See [README.md](README.md) for comprehensive documentation
 
-A full-stack application for managing investment fund cap tables, tracking unit ownership and transfers between parties. Built as a demo/interview project with a focus on clean architecture and domain-driven design.
+## Project Overview
 
-## Tech Stack
+Full-stack investment fund cap table management system with:
+- **Backend**: Go 1.24 REST API with Chi router, PostgreSQL, OpenTelemetry
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS
+- **Infrastructure**: Terraform for AWS (ECS Fargate, RDS, S3, ALB)
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Go 1.22+ (REST API) |
-| Database | PostgreSQL 16 |
-| Frontend | React 18 + TypeScript (planned) |
-| Infrastructure | Terraform on AWS |
-| Observability | OpenTelemetry |
+## Quick Start
 
-## Project Structure
+```bash
+# Start everything with Docker Compose
+docker-compose up -d
+
+# API: http://localhost:8080
+# Frontend: npm run dev (in frontend/)
+```
+
+## Architecture at a Glance
 
 ```
-augment-interview/
-├── cmd/
-│   └── server/
-│       └── main.go              # Application entry point
-├── internal/
-│   ├── config/
-│   │   └── config.go            # Environment configuration
-│   └── postgres/
-│       ├── config.go            # Database config with DSN builder
-│       ├── pool.go              # Connection pool with OTel tracing
-│       ├── migrate.go           # Embedded SQL migrations
-│       ├── metrics.go           # Pool metrics for OTel
-│       ├── testcontainer.go     # Integration test helpers
-│       └── migrations/
-│           ├── 001_create_funds_table.up.sql
-│           ├── 002_create_cap_table_entries.up.sql
-│           ├── 003_create_transfers_table.up.sql
-│           ├── 004_add_indexes.up.sql
-│           └── 005_add_timestamp_trigger.up.sql
-├── deploy/
-│   └── terraform/
-│       ├── providers.tf
-│       ├── variables.tf
-│       ├── secrets.tf
-│       └── outputs.tf
-├── openspec/                    # Spec-driven development framework
-│   ├── project.md               # Project conventions and domain context
-│   ├── AGENTS.md                # AI assistant instructions
-│   └── changes/                 # Change proposals (9 active)
-│       ├── add-api-contract/
-│       ├── add-fund-domain/
-│       ├── add-ownership-domain/
-│       ├── add-transfer-domain/
-│       ├── add-database-schema/
-│       ├── add-observability/
-│       ├── add-frontend-app/
-│       ├── add-aws-infrastructure/
-│       └── add-build-config/
-└── go.mod                       # Module: github.com/arowden/augment-fund
+┌─────────────────────────────────────────────────────────────────────┐
+│                           Frontend                                   │
+│  React SPA → TanStack Query → Generated API Client → REST API       │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                        Backend (Go)                                  │
+│  HTTP Handler → Services → Repositories → PostgreSQL                │
+│       │                                                              │
+│       └── OpenTelemetry → Traces & Metrics                          │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Domain Model
 
-### Bounded Contexts
-
-| Context | Purpose | Key Entity |
-|---------|---------|------------|
-| **Fund** | Investment fund management | Fund (aggregate root) |
-| **Ownership** | Cap table records | CapTableEntry |
-| **Transfer** | Unit movement between owners | Transfer |
-
-### Database Schema
-
-```
-┌─────────────────┐       ┌───────────────────────┐       ┌──────────────────┐
-│     funds       │       │   cap_table_entries   │       │    transfers     │
-├─────────────────┤       ├───────────────────────┤       ├──────────────────┤
-│ id (PK)         │◄──────│ fund_id (FK)          │◄──────│ fund_id (FK)     │
-│ name            │       │ id (PK)               │       │ id (PK)          │
-│ total_units     │       │ owner_name            │◄──────│ from_owner (FK)  │
-│ created_at      │       │ units                 │◄──────│ to_owner (FK)    │
-└─────────────────┘       │ acquired_at           │       │ units            │
-                          │ updated_at            │       │ idempotency_key  │
-                          │ deleted_at (soft del) │       │ transferred_at   │
-                          └───────────────────────┘       └──────────────────┘
-```
+| Entity | Location | Description |
+|--------|----------|-------------|
+| **Fund** | `backend/internal/fund/` | Investment fund with fixed units |
+| **CapTableEntry** | `backend/internal/ownership/` | Owner's stake in a fund |
+| **Transfer** | `backend/internal/transfer/` | Unit movement between owners |
 
 ### Key Invariants
+- Sum of cap table entries = fund's total units
+- No negative ownership (transfers validated)
+- No self-transfers
+- Idempotency keys prevent duplicate transfers
 
-- Total units across all cap table entries must equal fund's total units
-- Transfers must not result in negative ownership
-- Owner cannot transfer to themselves
-- Transfer units must be positive
+## Project Structure
 
-## Core Packages
+### Backend (`backend/`)
 
-### `cmd/server/main.go`
+| Path | Purpose |
+|------|---------|
+| `api/openapi.yaml` | OpenAPI 3.0 spec (source of truth) |
+| `cmd/server/main.go` | Application entrypoint |
+| `internal/config/` | Environment configuration |
+| `internal/fund/` | Fund domain (entity, service, store) |
+| `internal/ownership/` | Cap table domain |
+| `internal/transfer/` | Transfer domain with validation |
+| `internal/http/` | HTTP handlers + generated code |
+| `internal/postgres/` | Database utilities + migrations |
+| `internal/otel/` | OpenTelemetry setup |
 
-Application entry point with graceful shutdown handling.
+### Frontend (`frontend/`)
 
-```go
-// Key flow:
-1. Load config from environment
-2. Connect to PostgreSQL with connection pooling
-3. Run database migrations
-4. Register OTel metrics
-5. Wait for shutdown signal
-```
+| Path | Purpose |
+|------|---------|
+| `src/api/generated/` | Auto-generated API client |
+| `src/components/` | React components (12 components) |
+| `src/pages/` | Page components (Dashboard, FundPage, OwnersPage) |
+| `src/hooks/` | TanStack Query hooks (useFunds, useTransfers, useCapTable) |
+| `src/schemas/` | Zod validation schemas |
+| `e2e/` | Playwright E2E tests |
 
-### `internal/config`
+### Infrastructure (`deploy/terraform/`)
 
-Environment-based configuration using `envconfig`.
+| Module | Resources |
+|--------|-----------|
+| `vpc/` | VPC, subnets, NAT gateway |
+| `rds/` | PostgreSQL RDS instance |
+| `ecr/` | Container registry |
+| `ecs/` | Fargate cluster + service |
+| `frontend/` | S3 + CloudFront |
 
-| Variable | Default | Required |
-|----------|---------|----------|
-| `DB_HOST` | - | Yes |
-| `DB_PORT` | 5432 | No |
-| `DB_USER` | - | Yes |
-| `DB_PASSWORD` | - | Yes |
-| `DB_NAME` | - | Yes |
-| `DB_SSLMODE` | require | No |
-| `SERVER_HOST` | 0.0.0.0 | No |
-| `SERVER_PORT` | 8080 | No |
-
-### `internal/postgres`
-
-PostgreSQL utilities with comprehensive observability:
-
-- **pool.go** - Connection pool with `otelpgx` instrumentation
-- **config.go** - DSN builder with proper URL encoding
-- **migrate.go** - Embedded migrations using `golang-migrate`
-- **metrics.go** - Pool metrics (size, active, idle connections)
-
-## OpenSpec Change Proposals
-
-Active changes pending implementation:
-
-| Change | Status | Description |
-|--------|--------|-------------|
-| `add-api-contract` | Proposed | OpenAPI 3.0 spec with code generation |
-| `add-fund-domain` | Proposed | Fund entity, repository, service |
-| `add-ownership-domain` | Proposed | Cap table entries and queries |
-| `add-transfer-domain` | Proposed | Transfer operations with validation |
-| `add-database-schema` | Applied | PostgreSQL migrations (implemented) |
-| `add-observability` | Proposed | OTel setup with OTLP exporters |
-| `add-frontend-app` | Proposed | React + TypeScript SPA |
-| `add-aws-infrastructure` | Proposed | Terraform for VPC, RDS, ECS, S3 |
-| `add-build-config` | Proposed | Dockerfile with Orchestrion |
-
-## API Endpoints (Planned)
-
-Based on `add-api-contract` proposal:
+## API Quick Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/funds` | Create fund with initial owner |
-| GET | `/api/funds` | List all funds |
-| GET | `/api/funds/{fundId}` | Get fund by ID |
-| GET | `/api/funds/{fundId}/cap-table` | Get cap table (paginated) |
-| POST | `/api/funds/{fundId}/transfers` | Execute transfer |
-| GET | `/api/funds/{fundId}/transfers` | List transfers |
+| `GET` | `/api/funds` | List funds (paginated) |
+| `POST` | `/api/funds` | Create fund with initial owner |
+| `GET` | `/api/funds/{id}` | Get fund details |
+| `GET` | `/api/funds/{id}/cap-table` | Get ownership table |
+| `POST` | `/api/funds/{id}/transfers` | Execute transfer |
+| `GET` | `/api/funds/{id}/transfers` | List transfers |
+| `POST` | `/api/reset` | Reset database (dev only) |
+| `GET` | `/healthz` | Health check |
 
-## Key Dependencies
+## Key Files Reference
 
-| Package | Purpose |
-|---------|---------|
-| `jackc/pgx/v5` | PostgreSQL driver |
-| `exaring/otelpgx` | OTel tracing for pgx |
-| `golang-migrate/migrate/v4` | Database migrations |
-| `kelseyhightower/envconfig` | Environment config |
-| `testcontainers/testcontainers-go` | Integration testing |
-| `go.opentelemetry.io/otel` | Observability |
+### Backend Entry Points
 
-## Development Workflow
+| File | Purpose |
+|------|---------|
+| `backend/cmd/server/main.go` | Server startup, DI, graceful shutdown |
+| `backend/internal/http/handler.go` | HTTP request handlers |
+| `backend/internal/http/openapi.gen.go` | Generated types & interfaces |
 
-### Git Workflow
+### Service Layer
 
-- Main branch only (no feature branches)
-- Build must pass before commit
-- Commits pushed directly to main
+| File | Key Functions |
+|------|---------------|
+| `fund/service.go` | `CreateFundWithInitialOwner`, `GetFund`, `ListFunds` |
+| `ownership/service.go` | `GetCapTable`, `GetAllOwnersWithHoldings` |
+| `transfer/service.go` | `ExecuteTransfer`, `ListTransfers` |
 
-### Code Style
+### Repository Layer
 
+| File | Database Operations |
+|------|---------------------|
+| `fund/store.go` | CRUD for funds table |
+| `ownership/store.go` | Cap table entries, upserts, soft delete |
+| `transfer/store.go` | Transfer records, idempotency lookup |
+
+### Frontend Components
+
+| Component | Purpose |
+|-----------|---------|
+| `Layout.tsx` | App shell with navigation |
+| `Dashboard.tsx` | Fund list, stats, create fund |
+| `FundPage.tsx` | Fund detail with cap table + transfers |
+| `CapTable.tsx` | Ownership percentage visualization |
+| `TransferForm.tsx` | Transfer creation with validation |
+| `TransferHistory.tsx` | Transfer timeline |
+
+## Development Commands
+
+```bash
+# Build & Run
+make build              # Build server binary
+make run                # Build and run server
+make docker-build       # Build Docker image
+
+# Testing
+make test               # Unit tests (fast)
+make test-integration   # Integration tests (Docker required)
+make test-all           # All tests
+make test-coverage      # Coverage report
+
+# Code Quality
+make lint               # golangci-lint
+make generate-api       # Regenerate from OpenAPI
+
+# Frontend
+cd frontend
+npm run dev             # Development server
+npm run build           # Production build
+npm run test            # Vitest tests
+npm run e2e             # Playwright E2E
+```
+
+## Environment Variables
+
+### Required
+| Variable | Description |
+|----------|-------------|
+| `DB_HOST` | PostgreSQL host |
+| `DB_USER` | Database user |
+| `DB_PASSWORD` | Database password |
+| `DB_NAME` | Database name |
+
+### Optional
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DB_PORT` | `5432` | Database port |
+| `SERVER_PORT` | `8080` | API server port |
+| `OTEL_ENABLED` | `false` | Enable telemetry |
+
+See [README.md#environment-variables](README.md#environment-variables) for full list.
+
+## Code Patterns
+
+### Functional Options (Service Construction)
 ```go
-// Import order: stdlib, internal, third-party
-import (
-    "context"
-    "fmt"
-
-    "github.com/arowden/augment-fund/internal/config"
-
-    "github.com/jackc/pgx/v5/pgxpool"
+svc, err := transfer.NewService(
+    transfer.WithRepository(transferStore),
+    transfer.WithOwnershipRepository(ownershipStore),
+    transfer.WithPool(pool),
 )
 ```
 
-### Testing Strategy
-
-- **Unit tests**: Table-driven tests
-- **Integration tests**: Testcontainers for PostgreSQL
-- All business logic requires test coverage
-
-## Quick Reference
-
-### Run Migrations
-
-Migrations run automatically on server start via embedded SQL files.
-
-### Environment Variables
-
-```bash
-export DB_HOST=localhost
-export DB_PORT=5432
-export DB_USER=postgres
-export DB_PASSWORD=secret
-export DB_NAME=augment_fund
-export SERVER_HOST=0.0.0.0
-export SERVER_PORT=8080
+### Transaction Management
+```go
+tx, err := s.pool.Begin(ctx)
+defer tx.Rollback(ctx)
+// ... operations ...
+tx.Commit(ctx)
 ```
 
-### Build
+### Domain Errors
+```go
+var ErrNotFound = errors.New("fund not found")
 
-```bash
-go build -o bin/server ./cmd/server
+if errors.Is(err, fund.ErrNotFound) {
+    // Handle not found
+}
 ```
+
+## Tech Stack Summary
+
+| Layer | Technology |
+|-------|------------|
+| Language | Go 1.24 |
+| Router | Chi v5 |
+| Database | PostgreSQL 16 |
+| DB Driver | pgx v5 |
+| Migrations | golang-migrate |
+| API Spec | OpenAPI 3.0 |
+| Code Gen | oapi-codegen |
+| Testing | testify, testcontainers-go |
+| Linting | golangci-lint |
+| Telemetry | OpenTelemetry |
+| Frontend | React 18, Vite, Tailwind CSS |
+| State | TanStack Query |
+| Validation | Zod + react-hook-form |
+| E2E Tests | Playwright |
+| Infrastructure | Terraform, AWS ECS Fargate |
 
 ## Related Documentation
 
-- [Project Context](openspec/project.md) - Domain glossary and conventions
-- [OpenSpec Guide](openspec/AGENTS.md) - Spec-driven development workflow
-- [API Contract Spec](openspec/changes/add-api-contract/specs/api-contract/spec.md) - Full API requirements
+| Document | Contents |
+|----------|----------|
+| [README.md](README.md) | Comprehensive docs with Mermaid diagrams |
+| [openspec/project.md](openspec/project.md) | Domain glossary, conventions |
+| [openspec/AGENTS.md](openspec/AGENTS.md) | AI assistant instructions |
+| [backend/api/openapi.yaml](backend/api/openapi.yaml) | Full API specification |
+| [.golangci.yml](backend/.golangci.yml) | Linter configuration |
+
+## OpenSpec Changes (Archived)
+
+All planned features have been implemented:
+
+| Change | Status |
+|--------|--------|
+| `add-api-contract` | Implemented |
+| `add-fund-domain` | Implemented |
+| `add-ownership-domain` | Implemented |
+| `add-transfer-domain` | Implemented |
+| `add-database-schema` | Implemented |
+| `add-observability` | Implemented |
+| `add-frontend-app` | Implemented |
+| `add-aws-infrastructure` | Implemented |
+| `add-build-config` | Implemented |

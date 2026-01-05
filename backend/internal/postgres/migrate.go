@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 )
 
+//go:embed migrations/*
 var migrations embed.FS
 
 func Migrate(pool *pgxpool.Pool) error {

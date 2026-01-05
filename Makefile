@@ -7,6 +7,9 @@ BINARY_NAME := server
 BUILD_DIR := bin
 GO := go
 
+# Backend directory
+BACKEND_DIR := backend
+
 # Tool versions
 OAPI_CODEGEN_VERSION := v2.4.1
 
@@ -32,7 +35,7 @@ all: generate build test
 
 # Build the server binary (local, no instrumentation)
 build:
-	$(GO) build -ldflags="-s -w -X main.Version=$(VERSION)" -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
+	cd $(BACKEND_DIR) && $(GO) build -ldflags="-s -w -X main.Version=$(VERSION)" -o ../$(BUILD_DIR)/$(BINARY_NAME) ./cmd/server
 
 # Build Docker image (linux/amd64 for ECS Fargate)
 docker-build:
@@ -63,10 +66,13 @@ deploy-api: docker-build docker-push
 		--region $(AWS_REGION)
 	@echo "API deployed successfully!"
 
+# Get API URL from Terraform
+API_URL ?= $(shell cd deploy/terraform && terraform output -raw api_url 2>/dev/null || echo "http://localhost:8080")
+
 # Deploy frontend to S3
 deploy-frontend:
-	@echo "Building frontend..."
-	cd frontend && npm ci && npm run build
+	@echo "Building frontend with API_URL=$(API_URL)..."
+	cd frontend && npm ci && VITE_API_URL=$(API_URL) npm run build
 	@echo "Deploying to S3..."
 	aws s3 sync frontend/dist/ s3://$(S3_BUCKET) \
 		--delete \
@@ -107,27 +113,27 @@ verify-binary:
 
 # Run unit tests only (fast, no Docker required)
 test:
-	$(GO) test -v -race ./...
+	cd $(BACKEND_DIR) && $(GO) test -v -race ./...
 
 # Alias for test
 test-unit: test
 
 # Run integration tests (requires Docker)
 test-integration:
-	$(GO) test -v -race -tags=integration ./...
+	cd $(BACKEND_DIR) && $(GO) test -v -race -tags=integration ./...
 
 # Run all tests (unit + integration)
 test-all:
-	$(GO) test -v -race -tags=integration ./...
+	cd $(BACKEND_DIR) && $(GO) test -v -race -tags=integration ./...
 
 # Run tests with coverage
 test-coverage:
-	$(GO) test -v -race -coverprofile=coverage.out ./...
-	$(GO) tool cover -html=coverage.out -o coverage.html
+	cd $(BACKEND_DIR) && $(GO) test -v -race -coverprofile=coverage.out ./...
+	cd $(BACKEND_DIR) && $(GO) tool cover -html=coverage.out -o coverage.html
 
 # Run linter
 lint:
-	golangci-lint run ./...
+	cd $(BACKEND_DIR) && golangci-lint run ./...
 
 # Generate all code
 generate: generate-api
@@ -135,8 +141,8 @@ generate: generate-api
 # Generate Go server code from OpenAPI spec
 generate-api: tools
 	@echo "Generating Go server code from OpenAPI spec..."
-	@mkdir -p internal/http
-	$(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION) \
+	@mkdir -p $(BACKEND_DIR)/internal/http
+	cd $(BACKEND_DIR) && $(GO) run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION) \
 		--config api/oapi-codegen.yaml \
 		api/openapi.yaml
 
@@ -144,7 +150,7 @@ generate-api: tools
 validate-api:
 	@echo "Validating OpenAPI spec..."
 	@command -v openapi-generator-cli >/dev/null 2>&1 && \
-		openapi-generator-cli validate -i api/openapi.yaml || \
+		openapi-generator-cli validate -i $(BACKEND_DIR)/api/openapi.yaml || \
 		echo "Install openapi-generator-cli for validation: npm install -g @openapitools/openapi-generator-cli"
 
 # Install/verify tools
@@ -155,7 +161,7 @@ tools:
 # Clean build artifacts
 clean:
 	rm -rf $(BUILD_DIR)
-	rm -f coverage.out coverage.html sbom.json
+	rm -f $(BACKEND_DIR)/coverage.out $(BACKEND_DIR)/coverage.html sbom.json
 
 # Run the server locally
 run: build

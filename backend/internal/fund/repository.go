@@ -19,10 +19,7 @@ type ListResult struct {
 
 type Repository interface {
 	Create(ctx context.Context, fund *Fund) error
-
 	CreateTx(ctx context.Context, tx pgx.Tx, fund *Fund) error
-
 	FindByID(ctx context.Context, id uuid.UUID) (*Fund, error)
-
 	List(ctx context.Context, params ListParams) (*ListResult, error)
 }

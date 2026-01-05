@@ -30,7 +30,7 @@
 
   /* Focus styles */
   .focus-ring {
-    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-950;
   }
 
   /* Buttons */
@@ -41,9 +41,9 @@
   }
 
   .btn-primary {
-    @apply btn bg-indigo-600 text-white;
-    @apply hover:bg-indigo-500 hover:shadow-glow;
-    @apply active:bg-indigo-700;
+    @apply btn bg-indigo-500 text-white;
+    @apply hover:bg-indigo-400 hover:shadow-glow;
+    @apply active:bg-indigo-600;
   }
 
   .btn-secondary {
@@ -54,6 +54,11 @@
   .btn-ghost {
     @apply btn text-slate-400;
     @apply hover:text-white hover:bg-slate-800;
+  }
+
+  .btn-outline {
+    @apply btn bg-transparent text-white border border-slate-600;
+    @apply hover:bg-slate-800/50 hover:border-slate-500;
   }
 
   /* Input styles */
@@ -93,12 +98,17 @@
   .stat-label {
     @apply text-sm text-slate-400 font-medium;
   }
+
+  /* Display typography */
+  .display-heading {
+    @apply font-display text-4xl sm:text-5xl lg:text-6xl text-white italic;
+  }
 }
 
 /* Skip link */
 .skip-link {
   @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50;
-  @apply focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-xl focus:font-medium;
+  @apply focus:px-4 focus:py-2 focus:bg-indigo-500 focus:text-white focus:rounded-xl focus:font-medium;
 }
 
 /* Loading skeleton */

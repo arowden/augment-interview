@@ -337,44 +337,39 @@ func (h *Handler) CreateFund(ctx context.Context, req CreateFundRequestObject) (
 
 ```
 .
-├── api/
-│   ├── openapi.yaml           # OpenAPI 3.0 specification
-│   └── oapi-codegen.yaml      # Code generation config
-├── cmd/
-│   └── server/
-│       └── main.go            # Application entrypoint
+├── backend/                    # Go API server
+│   ├── api/
+│   │   ├── openapi.yaml       # OpenAPI 3.0 specification
+│   │   └── oapi-codegen.yaml  # Code generation config
+│   ├── cmd/
+│   │   └── server/
+│   │       └── main.go        # Application entrypoint
+│   ├── internal/
+│   │   ├── config/            # Environment configuration
+│   │   ├── fund/              # Fund domain
+│   │   │   ├── entity.go      # Fund type, NewFund constructor
+│   │   │   ├── errors.go      # Domain errors
+│   │   │   ├── repository.go  # Repository interface
+│   │   │   ├── service.go     # Business logic
+│   │   │   └── store.go       # PostgreSQL implementation
+│   │   ├── http/              # HTTP layer
+│   │   │   ├── handler.go     # Request handlers
+│   │   │   └── openapi.gen.go # Generated code
+│   │   ├── otel/              # OpenTelemetry setup
+│   │   ├── ownership/         # Cap table domain
+│   │   ├── postgres/          # Database utilities
+│   │   ├── transfer/          # Transfer domain
+│   │   └── validation/        # Shared validation
+│   ├── go.mod
+│   └── .golangci.yml          # Linter configuration
 ├── frontend/                   # React frontend (Vite + Tailwind)
 │   ├── src/
 │   │   ├── api/               # Generated API client
 │   │   ├── components/        # React components
 │   │   └── pages/             # Page components
 │   └── e2e/                   # Playwright E2E tests
-├── internal/
-│   ├── config/                # Environment configuration
-│   ├── fund/                  # Fund domain
-│   │   ├── entity.go          # Fund type, NewFund constructor
-│   │   ├── errors.go          # Domain errors
-│   │   ├── repository.go      # Repository interface
-│   │   ├── service.go         # Business logic
-│   │   └── store.go           # PostgreSQL implementation
-│   ├── http/                  # HTTP layer
-│   │   ├── handler.go         # Request handlers
-│   │   └── openapi.gen.go     # Generated code
-│   ├── otel/                  # OpenTelemetry setup
-│   │   ├── provider.go        # Tracer/Meter initialization
-│   │   ├── middleware.go      # HTTP instrumentation
-│   │   └── metrics.go         # Custom metrics
-│   ├── ownership/             # Cap table domain
-│   ├── postgres/              # Database utilities
-│   │   ├── config.go          # Connection config
-│   │   ├── pool.go            # Pool creation
-│   │   ├── migrate.go         # Schema migrations
-│   │   └── testcontainer.go   # Test infrastructure
-│   ├── transfer/              # Transfer domain
-│   └── validation/            # Shared validation
 ├── deploy/
 │   └── terraform/             # AWS infrastructure
-├── .golangci.yml              # Linter configuration
 ├── Dockerfile                 # Multi-stage build
 ├── Makefile                   # Build automation
 └── docker-compose.yml         # Local development

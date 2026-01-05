@@ -4,11 +4,11 @@ FROM golang:1.24-bookworm AS builder
 WORKDIR /app
 
 # Cache dependencies
-COPY go.mod go.sum ./
+COPY backend/go.mod backend/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     go mod download
 
-COPY . .
+COPY backend/ .
 
 # Build with stripped debug info
 ARG VERSION=dev
@@ -29,8 +29,6 @@ WORKDIR /home/nonroot
 
 EXPOSE 8080
 
-# Healthcheck compatible with distroless (no shell)
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
-  CMD ["/server", "--health-check"]
+# Note: ECS uses ALB target group health checks, not Docker HEALTHCHECK
 
 ENTRYPOINT ["/server"]
